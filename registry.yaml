@@ -1,0 +1,98 @@
+version: 1
+updated: "2026-04-12"
+
+plugins:
+  # ── Wordlists ────────────────────────────────────────────────
+  seclists:
+    repo: https://github.com/danielmiessler/SecLists
+    type: wordlist
+    description: "Discovery, fuzzing, and password lists"
+    size: "1.2GB"
+    tags: [recon, fuzzing, passwords, discovery]
+
+  payloadsallthethings:
+    repo: https://github.com/swisskyrepo/PayloadsAllTheThings
+    type: wordlist
+    description: "Payload lists for web application security"
+    size: "200MB"
+    tags: [payloads, injection, xss, sqli, ssti]
+
+  onelistforall:
+    repo: https://github.com/six2dez/OneListForAll
+    type: wordlist
+    description: "Merged wordlists for web fuzzing"
+    size: "500MB"
+    tags: [fuzzing, discovery]
+
+  fuzzdb:
+    repo: https://github.com/fuzzdb-project/fuzzdb
+    type: wordlist
+    description: "Attack patterns and payload lists for fuzzing"
+    size: "60MB"
+    tags: [fuzzing, payloads]
+
+  assetnote-wordlists:
+    repo: https://github.com/assetnote/wordlists
+    type: wordlist
+    description: "Assetnote automated wordlists"
+    size: "2GB"
+    tags: [recon, fuzzing, subdomains]
+
+  leaky-paths:
+    repo: https://github.com/ayoubfathi/leaky-paths
+    type: wordlist
+    description: "Common sensitive path wordlists"
+    size: "1MB"
+    tags: [discovery, paths, sensitive]
+
+  # ── Nuclei Templates ────────────────────────────────────────
+  nuclei-templates:
+    repo: https://github.com/projectdiscovery/nuclei-templates
+    type: nuclei-templates
+    description: "Official ProjectDiscovery nuclei templates"
+    size: "180MB"
+    tags: [scanning, cves, vulnerabilities]
+
+  nuclei-templates-community:
+    repo: https://github.com/projectdiscovery/nuclei-templates
+    type: nuclei-templates
+    description: "Community-contributed nuclei templates"
+    size: "180MB"
+    tags: [scanning, community]
+
+  fuzzing-templates:
+    repo: https://github.com/projectdiscovery/fuzzing-templates
+    type: nuclei-templates
+    description: "Nuclei fuzzing templates"
+    size: "5MB"
+    tags: [fuzzing, nuclei]
+
+  # ── Configs ──────────────────────────────────────────────────
+  gf-patterns:
+    repo: https://github.com/1ndianl33t/Gf-Patterns
+    type: config
+    description: "GF patterns for bug bounty recon"
+    size: "50KB"
+    tags: [recon, patterns, gf]
+
+  # ── Shell Themes ─────────────────────────────────────────────
+  powerlevel10k:
+    repo: https://github.com/romkatv/powerlevel10k
+    type: theme
+    description: "Zsh theme with instant prompt"
+    size: "4MB"
+    tags: [shell, theme, zsh]
+
+  zsh-autosuggestions:
+    repo: https://github.com/zsh-users/zsh-autosuggestions
+    type: theme
+    description: "Fish-like autosuggestions for zsh"
+    size: "200KB"
+    tags: [shell, zsh]
+
+  zsh-syntax-highlighting:
+    repo: https://github.com/zsh-users/zsh-syntax-highlighting
+    type: theme
+    description: "Syntax highlighting for zsh"
+    size: "500KB"
+    tags: [shell, zsh]
