@@ -1,6 +1,49 @@
 version: 1
 updated: "2026-04-12"
 
+# pdtm-format tools: install via `csbx pdtm <name>` (resolves through this section)
+pdtm_tools:
+  subfinder:
+    repo: projectdiscovery/subfinder
+    install_type: go
+    go_install_path: github.com/projectdiscovery/subfinder/v2/cmd/subfinder
+    version: latest
+  httpx:
+    repo: projectdiscovery/httpx
+    install_type: go
+    go_install_path: github.com/projectdiscovery/httpx/cmd/httpx
+    version: latest
+  nuclei:
+    repo: projectdiscovery/nuclei
+    install_type: go
+    go_install_path: github.com/projectdiscovery/nuclei/v3/cmd/nuclei
+    version: latest
+  katana:
+    repo: projectdiscovery/katana
+    install_type: go
+    go_install_path: github.com/projectdiscovery/katana/cmd/katana
+    version: latest
+  dalfox:
+    repo: hahwul/dalfox
+    install_type: go
+    go_install_path: github.com/hahwul/dalfox/v2@latest
+    version: latest
+  gau:
+    repo: lc/gau
+    install_type: go
+    go_install_path: github.com/lc/gau/v2/cmd/gau
+    version: latest
+  waybackurls:
+    repo: tomnomnom/waybackurls
+    install_type: go
+    go_install_path: github.com/tomnomnom/waybackurls
+    version: latest
+  ffuf:
+    repo: ffuf/ffuf
+    install_type: go
+    go_install_path: github.com/ffuf/ffuf/v2
+    version: latest
+
 plugins:
   # ── Wordlists ────────────────────────────────────────────────
   seclists:
