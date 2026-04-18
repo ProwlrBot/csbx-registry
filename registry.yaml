@@ -118,6 +118,44 @@ plugins:
     size: "50KB"
     tags: [recon, patterns, gf]
 
+  # ── YARA Rules ───────────────────────────────────────────────
+  capa-rules:
+    repo: https://github.com/mandiant/capa-rules
+    type: yara-rules
+    description: "Mandiant capa capability rules for PE/ELF/.NET"
+    size: "8MB"
+    tags: [malware, capa, capabilities, mandiant]
+
+  signature-base:
+    repo: https://github.com/Neo23x0/signature-base
+    type: yara-rules
+    description: "Florian Roth's YARA rules — APT, webshells, hack tools, maldocs"
+    size: "40MB"
+    tags: [malware, apt, webshells, hacktools, neo23x0]
+
+  yara-rules-community:
+    repo: https://github.com/YARA-Rules/rules
+    type: yara-rules
+    description: "Community-maintained YARA rules across malware families"
+    size: "20MB"
+    tags: [malware, yara, community]
+
+  # ── Sigma Rules ──────────────────────────────────────────────
+  sigma:
+    repo: https://github.com/SigmaHQ/sigma
+    type: sigma
+    description: "SigmaHQ detection rules for logs and EDR"
+    size: "30MB"
+    tags: [detection, siem, edr, sigma]
+
+  # ── Threat Intel ─────────────────────────────────────────────
+  misp-warninglists:
+    repo: https://github.com/MISP/misp-warninglists
+    type: threat-intel
+    description: "MISP warning lists for false-positive reduction on IOCs"
+    size: "60MB"
+    tags: [misp, ioc, warninglists, threat-intel]
+
   # ── Shell Themes ─────────────────────────────────────────────
   powerlevel10k:
     repo: https://github.com/romkatv/powerlevel10k
