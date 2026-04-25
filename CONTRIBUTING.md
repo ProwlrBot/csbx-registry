@@ -54,11 +54,16 @@ my-caido-plugin:
   tags: [caido, http]
   release: v1.2.0                       # tag the intake workflow will pull
   manifest: caido.json                  # path inside the release artifact (default: caido.json)
+  platforms:                            # OPTIONAL — declare install targets
+    - linux-amd64
+    - darwin-arm64
   signature:
     method: cosign                      # cosign | minisign (cosign preferred)
     issuer: https://token.actions.githubusercontent.com
     identity: https://github.com/user/caido-plugin/.github/workflows/release.yml@refs/tags/v1.2.0
 ```
+
+**`platforms` (optional)** — declare which OS+arch combinations your release ships. Valid values: `linux-amd64`, `linux-arm64`, `darwin-amd64`, `darwin-arm64`, `windows-amd64`, `windows-arm64`. When set, intake asserts a matching asset exists in the GitHub release for each declared platform. Asset name match is case-insensitive substring on `<os>` plus `<arch>` (with `amd64`/`x86_64`/`x64` and `arm64`/`aarch64` treated as aliases). Omit if your plugin is platform-agnostic (e.g. pure JS).
 
 The `signature` block is **required** for `caido-plugin` entries. See [intake/POLICY.md](./intake/POLICY.md) for how to wire keyless signing in your release workflow if you do not already.
 

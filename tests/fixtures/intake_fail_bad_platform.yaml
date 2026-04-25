@@ -1,0 +1,21 @@
+# Fixture: entry declares an unsupported platform identifier.
+# Schema validator must reject with exit 1.
+section: caido_plugins
+key: bad-platform
+entry:
+  repo: https://github.com/example/bad-platform
+  type: caido-plugin
+  description: "Caido plugin declaring an unsupported platform identifier"
+  size: "1MB"
+  tags: [caido]
+  release: v1.0.0
+  manifest: caido.json
+  platforms:
+    - linux-amd64
+    - solaris-sparc
+  signature:
+    method: cosign
+    issuer: https://token.actions.githubusercontent.com
+    identity: https://github.com/example/bad-platform/.github/workflows/release.yml@refs/tags/v1.0.0
+expect_exit: 1
+expect_error_contains: unsupported platforms

@@ -40,6 +40,11 @@ SUPPORTED_TYPES = {
 REQUIRED_BASE_FIELDS = ("repo", "type", "description", "size", "tags")
 REQUIRED_CAIDO_FIELDS = ("release", "manifest", "signature")
 SUPPORTED_SIG_METHODS = {"cosign", "minisign"}
+SUPPORTED_PLATFORMS = {
+    "linux-amd64", "linux-arm64",
+    "darwin-amd64", "darwin-arm64",
+    "windows-amd64", "windows-arm64",
+}
 
 GITHUB_REPO_RE = re.compile(r"^https://github\.com/[^/\s]+/[^/\s]+/?$")
 
@@ -96,6 +101,17 @@ def main() -> None:
 
     if not isinstance(entry["description"], str) or len(entry["description"]) < 10:
         fail(f"entry {name!r} description must be at least 10 characters")
+
+    if "platforms" in entry:
+        platforms = entry["platforms"]
+        if not isinstance(platforms, list) or not platforms:
+            fail(f"entry {name!r} platforms must be a non-empty list when set")
+        invalid = [p for p in platforms if p not in SUPPORTED_PLATFORMS]
+        if invalid:
+            fail(
+                f"entry {name!r} declares unsupported platforms: {invalid}",
+                supported=sorted(SUPPORTED_PLATFORMS),
+            )
 
     if entry["type"] == "caido-plugin":
         if section != "caido_plugins":

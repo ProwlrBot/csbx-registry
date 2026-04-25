@@ -68,18 +68,69 @@ if [[ "$private" == "true" ]]; then
 fi
 
 # Caido plugins must point at a real release tag
+release_json=""
 if [[ "$type" == "caido-plugin" ]]; then
   if [[ -z "$release" ]]; then
     fail "caido-plugin $ENTRY_NAME missing release field"
   fi
-  rcode=$(curl -s -o /dev/null -w '%{http_code}' \
+  release_json=$(mktemp)
+  rcode=$(curl -s -o "$release_json" -w '%{http_code}' \
     -H 'Accept: application/vnd.github+json' \
     "${auth_args[@]}" \
     "https://api.github.com/repos/$slug/releases/tags/$release" || true)
   if [[ "$rcode" != "200" ]]; then
+    rm -f "$release_json"
     fail "release tag $release not found in $slug (API returned $rcode)"
   fi
 fi
 
+# Per-platform asset coverage check (any entry can declare platforms;
+# only meaningful when a release tag and asset list are available).
+platforms=$(jq -r '.platforms[]? // empty' <<<"$ENTRY_JSON")
+if [[ -n "$platforms" ]]; then
+  if [[ -z "$release_json" ]]; then
+    # Non-caido entry declared platforms — fetch the release JSON to check assets.
+    if [[ -z "$release" ]]; then
+      fail "entry $ENTRY_NAME declares platforms but has no release tag"
+    fi
+    release_json=$(mktemp)
+    curl -s -H 'Accept: application/vnd.github+json' "${auth_args[@]}" \
+      "https://api.github.com/repos/$slug/releases/tags/$release" >"$release_json" || true
+  fi
+
+  asset_names=$(jq -r '.assets[]?.name // empty' "$release_json" | tr 'A-Z' 'a-z')
+  if [[ -z "$asset_names" ]]; then
+    rm -f "$release_json"
+    fail "release $release in $slug has no assets to satisfy declared platforms"
+  fi
+
+  missing=()
+  while IFS= read -r platform; do
+    [[ -z "$platform" ]] && continue
+    os="${platform%-*}"
+    arch="${platform#*-}"
+    # Match if any asset name contains both os and arch (or the arch alias).
+    found=""
+    while IFS= read -r asset; do
+      if [[ "$asset" == *"$os"* ]]; then
+        if [[ "$arch" == "amd64" && ( "$asset" == *amd64* || "$asset" == *x86_64* || "$asset" == *x64* ) ]]; then
+          found="$asset"; break
+        elif [[ "$arch" == "arm64" && ( "$asset" == *arm64* || "$asset" == *aarch64* ) ]]; then
+          found="$asset"; break
+        fi
+      fi
+    done <<<"$asset_names"
+    if [[ -z "$found" ]]; then
+      missing+=("$platform")
+    fi
+  done <<<"$platforms"
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    rm -f "$release_json"
+    fail "release $release missing assets for: ${missing[*]}"
+  fi
+fi
+
+[[ -n "$release_json" ]] && rm -f "$release_json"
 printf '[+] repo: %s ok (release=%s)\n' "$slug" "${release:-n/a}" >&2
 emit "pass" "$(jq -nc --arg s "$slug" --arg r "${release:-}" '{slug:$s,release:$r}')"
