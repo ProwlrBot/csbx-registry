@@ -136,3 +136,9 @@ The harness exits 0 if your entry would pass, and non-zero with the failing chec
 ## Code of conduct
 
 Be helpful. Be specific. If you reject a plugin, explain what would make it acceptable. If you submit a plugin, respond to review comments rather than re-opening identical PRs.
+
+---
+
+## Project governance
+
+How decisions get made, the no-self-merge rule, and how maintainers are added or removed live in [`GOVERNANCE.md`](./GOVERNANCE.md). Read it if you are interested in becoming a maintainer or want to understand who can merge what.

@@ -74,3 +74,11 @@ my-plugin:
 ```
 
 Caido plugins additionally declare a `release` tag and a `signature` block — see CONTRIBUTING for the full schema.
+
+## Project documents
+
+| Doc | What it covers |
+|-----|----------------|
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | How to add or update entries |
+| [`intake/POLICY.md`](./intake/POLICY.md) | What the intake workflow checks and why |
+| [`GOVERNANCE.md`](./GOVERNANCE.md) | Decision-making, no-self-merge, maintainer rotation |
