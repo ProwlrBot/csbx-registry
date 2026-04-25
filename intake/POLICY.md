@@ -128,6 +128,12 @@ signature:
 
 If you genuinely cannot use cosign (e.g. self-hosted runner with no OIDC), use `method: minisign` and pin a public key. Maintainers reserve the right to decline minisign entries that look like an attempt to evade keyless attestation.
 
+#### Concrete walkthroughs
+
+- A canonical *passing* shape lives in [`tests/fixtures/intake_pass.yaml`](../tests/fixtures/intake_pass.yaml) (cosign) and [`tests/fixtures/intake_pass_minisign.yaml`](../tests/fixtures/intake_pass_minisign.yaml) (minisign). Match these.
+- Plugin candidates that are not yet landable (most commonly: not yet cosign-signed) live in [`intake/CAIDO_CANDIDATES.md`](./CAIDO_CANDIDATES.md). The maintainer process for moving a candidate to a landed entry is documented there.
+- Use the [Caido plugin candidate](../.github/ISSUE_TEMPLATE/caido-plugin-candidate.md) issue template to nominate; the template ships the strict-tier readiness checklist.
+
 #### Minisign — accepted-but-discouraged path
 
 For `method: minisign`, the entry must declare `signature.public_key`. The validator (`scripts/intake/validate-schema.py`) enforces presence; the runtime path in `scripts/intake/verify-signature.sh` resolves the key as one of:
