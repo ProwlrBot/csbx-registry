@@ -128,15 +128,68 @@ signature:
 
 If you genuinely cannot use cosign (e.g. self-hosted runner with no OIDC), use `method: minisign` and pin a public key. Maintainers reserve the right to decline minisign entries that look like an attempt to evade keyless attestation.
 
-## What is *not* checked
+## Non-goals
 
-Every check has a cost; we deliberately stop short of:
+These are deliberate, versioned decisions — not oversights. Each is dated and tied to the `policy_version` so a future revisit can read the rationale before relitigating it.
 
-- **Sandbox execution.** We do not run the plugin's install hook in a VM. Hooks are reviewed manually by maintainers — and they are short. If a hook gets longer than 10 lines, that is a smell.
-- **Behavioral fuzzing.** No live network requests, no Caido instance spun up to load the plugin. SAST + manual review is the substitute.
-- **Dependency vulnerability scanning.** The SBOM is generated and stored; users can run `grype` against it themselves. The workflow does not gate merges on CVE counts because CVE noise is high and most CVEs are not exploitable in plugin code.
+### NG-1 · Sandbox execution of install hooks
 
-If you think one of these should be added, open an issue. We will weigh added security against added friction.
+> **Decision:** csbx-registry does NOT execute plugin install hooks in a sandbox or VM as part of intake.
+> **Decided under policy_version:** `2026-04-25`
+
+**Rationale.** Install hooks run on the user's machine via the [csbx CLI](https://github.com/kdairatchi/cybersandbox), which is out of scope for the registry. Sandboxing a hook in CI would not protect the user — it would only verify "this hook does X under our sandbox conditions," which the hook author can game and which says nothing about the hook's behavior on a real workstation. The substitutes are:
+
+1. **Manual review.** Hooks longer than 10 lines are a smell and get rejected.
+2. **SAST.** `intake/semgrep-caido.yml` flags shell-injection sinks, hardcoded credentials, and `eval`-on-untrusted-input.
+3. **Signature verification.** For `caido-plugin`, the hook ships in a cosign-signed release; an attacker would have to compromise the plugin author's GitHub OIDC identity to swap the hook silently.
+
+**Cost of changing this.** Sandbox tooling at intake time would require a per-plugin runner image, network egress controls, and a deterministic execution environment for every supported install backend (`go install`, `npm`, `git clone`, `pip`, etc.). The complexity is high; the benefit (catching a hostile hook in CI rather than at install time) is bounded by the user's local environment differing from CI anyway.
+
+**If you want to revisit this**, open an issue with: a concrete attack a sandbox would catch that the three substitutes above would miss, and a sketch of the per-backend runner setup. Without both, the issue will be closed as "see NG-1."
+
+### NG-2 · Mirroring or CDN of upstream artifacts
+
+> **Decision:** csbx-registry does NOT mirror release tarballs, host a CDN, or stage upstream artifacts. The registry is a **manifest pointing at upstream GitHub repos**, so upstream availability == registry availability.
+> **Decided under policy_version:** `2026-04-25`
+
+**Rationale.** A mirror would require:
+
+- Storage and bandwidth scaling with the catalog (currently ~5GB across SecLists, assetnote-wordlists, etc.; growing).
+- A re-publish pipeline keyed on upstream releases.
+- A trust story for "the mirror is the same as upstream" — adding cosign re-signing, hash audits, or both.
+- An incident response process for "the mirror was tampered with" that does not exist for the manifest-only model.
+
+We have three contributors. The registry's value is curation + intake gating, not artifact hosting. Spending maintainer time on a mirror trades that core value for redundancy that GitHub already provides (and that an air-gap user can build for themselves with `tools/prefetch.sh` once shipped).
+
+**What we recommend instead — user-side artifact pinning.** Users who need availability guarantees beyond GitHub:
+
+1. Clone csbx-registry locally; treat your clone as the manifest of record.
+2. For each entry you depend on, download the upstream release tarball at a pinned tag.
+3. Verify the cosign signature (for `caido-plugin`) or pin the SHA-256 (for everything else) in your own bookkeeping.
+4. Cache the tarball + signature + verification log in a location you control (NAS, S3, USB, whatever your engagement allows).
+5. Resolve installs from your local cache.
+
+This gives you the same availability story as a mirror without making the registry responsible for it. See `OFFLINE.md` (when shipped) for a worked example.
+
+**If you want to revisit this**, open an issue with: the failure mode you have hit that user-side pinning does not address, and a contributor who is committing to operating the mirror. Without both, the issue will be closed as "see NG-2."
+
+### NG-3 · Behavioral fuzzing of plugins at intake
+
+> **Decision:** csbx-registry does NOT run plugins against synthetic traffic, fuzz inputs, or otherwise exercise behavior at intake time.
+> **Decided under policy_version:** `2026-04-25`
+
+The substitutes are SAST and manual review. Optional live-load smoke testing for `caido-plugin` (does the plugin load without crashing?) may be added later as a non-blocking signal — see roadmap feature-13.
+
+### NG-4 · Blocking on dependency CVEs
+
+> **Decision:** csbx-registry does NOT block merge on CVE counts in the SBOM.
+> **Decided under policy_version:** `2026-04-25`
+
+Per CVE noise being high (and most CVEs in plugin dependencies not being exploitable in the plugin's actual code path), gating on CVE count would generate review fatigue without proportional security gain. Informational CVE signal in PR comments may be added as a non-blocking enhancement — see roadmap feature-12. If we add it, this decision is revised to "informational, not gating," with `policy_version` bumped accordingly.
+
+---
+
+If you think one of these should be added, open an issue with the format above (concrete failure mode + concrete owner). We will weigh added security against added friction.
 
 ## Maintainer override
 

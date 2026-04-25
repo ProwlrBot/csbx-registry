@@ -78,6 +78,8 @@ The `Plugin Intake Check` workflow runs on every PR that touches `registry.yaml`
 
 **Required ⇒ blocks merge.** **Informational ⇒ comment on PR but does not block.**
 
+> Things the workflow deliberately does *not* do — sandboxing install hooks, mirroring upstream artifacts, blocking on CVE counts — live in [`intake/POLICY.md` § Non-goals](./intake/POLICY.md#non-goals). Read those before opening an issue asking for them; they are versioned decisions, not oversights.
+
 The line between required and informational reflects pragmatism: existing wordlist/theme entries were not signed, and forcing retroactive signing would freeze the registry. Caido plugins, on the other hand, are *executable* code that runs in a security tool — they get the strictest path.
 
 ---
