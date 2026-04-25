@@ -68,9 +68,12 @@ def main() -> int:
 
     changed: list[dict] = []
     if args.only:
-        if args.only in head:
-            section, _, name = args.only.partition(".")
-            changed.append({"key": name, "section": section, "entry": head[args.only]})
+        # Accept both "<section>.<name>" (internal) and "<section>/<name>"
+        # (user-facing, matches the workflow input description). Normalize.
+        only_key = args.only.replace("/", ".", 1)
+        if only_key in head:
+            section, _, name = only_key.partition(".")
+            changed.append({"key": name, "section": section, "entry": head[only_key]})
     else:
         for full_key, entry in head.items():
             if base.get(full_key) == entry:

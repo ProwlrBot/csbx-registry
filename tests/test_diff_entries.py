@@ -105,6 +105,19 @@ def test_only_flag_missing_entry() -> None:
     print("[PASS] --only with missing key produces empty list")
 
 
+def test_only_flag_accepts_slash_separator() -> None:
+    # Workflow input format uses "<section>/<name>" — diff-entries should
+    # normalize that to the internal "<section>.<name>" form.
+    head = write_tmp(SAMPLE_YAML)
+    code, out, _ = run(["--head", str(head), "--only", "plugins/seclists"])
+    assert code == 0, out
+    data = json.loads(out)
+    assert len(data["include"]) == 1, f"expected 1 entry, got {data}"
+    assert data["include"][0]["key"] == "seclists"
+    head.unlink()
+    print("[PASS] --only accepts slash separator")
+
+
 def main() -> int:
     tests = [
         test_diff_against_empty_base,
@@ -112,6 +125,7 @@ def main() -> int:
         test_diff_modified_entry,
         test_only_flag,
         test_only_flag_missing_entry,
+        test_only_flag_accepts_slash_separator,
     ]
     failures = 0
     for t in tests:
