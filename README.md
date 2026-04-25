@@ -83,3 +83,4 @@ Caido plugins additionally declare a `release` tag and a `signature` block — s
 | [`intake/POLICY.md`](./intake/POLICY.md) | What the intake workflow checks and why |
 | [`GOVERNANCE.md`](./GOVERNANCE.md) | Decision-making, no-self-merge, maintainer rotation |
 | [`MIGRATIONS.md`](./MIGRATIONS.md) | Schema migration process and version-bump workflow |
+| [`OFFLINE.md`](./OFFLINE.md) | Air-gap / offline workflow (prefetch, cosign Rekor bundle pre-resolution) |
