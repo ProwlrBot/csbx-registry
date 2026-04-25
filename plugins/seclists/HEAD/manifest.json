@@ -1,0 +1,10 @@
+{
+  "name": "seclists",
+  "section": "plugins",
+  "type": "wordlist",
+  "repo": "https://github.com/danielmiessler/SecLists",
+  "release": "HEAD",
+  "intake_sha": "735a7e7bbb02ca3a95c9a8ae7a3600285958e136",
+  "generated_at": "2026-04-25T21:21:02Z",
+  "workflow_run": "24940905390"
+}
