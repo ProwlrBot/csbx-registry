@@ -31,9 +31,11 @@ FIXTURE_DIR = ROOT / "tests" / "fixtures"
 VALIDATOR = ROOT / "scripts" / "intake" / "validate-schema.py"
 
 
-def run_fixture(fixture: Path) -> tuple[bool, str]:
+def run_fixture(fixture: Path) -> tuple[bool, str] | None:
     data = yaml.safe_load(fixture.read_text())
     section = data["section"]
+    if section.startswith("_"):
+        return None  # manifest-level fixtures; not exercised by per-entry harness
     key = data["key"]
     entry = data["entry"]
     expect_exit = int(data.get("expect_exit", 0))
@@ -76,7 +78,11 @@ def main() -> int:
     print("=== Intake fixture results ===")
     for fixture in fixtures:
         name = fixture.stem
-        ok, detail = run_fixture(fixture)
+        result = run_fixture(fixture)
+        if result is None:
+            print(f"[SKIP] {name}")
+            continue
+        ok, detail = result
         if ok:
             pass_count += 1
             print(f"[PASS] {name}")

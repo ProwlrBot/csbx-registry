@@ -17,6 +17,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  manifest:
+    name: Manifest policy_version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Python deps
+        run: pip install --quiet pyyaml
+      - name: Validate manifest
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show "${BASE_SHA}:registry.yaml" > /tmp/base-registry.yaml || true
+          if [ -s /tmp/base-registry.yaml ]; then
+            BASE_REGISTRY_FILE=/tmp/base-registry.yaml ./scripts/intake/validate-manifest.py
+          else
+            ./scripts/intake/validate-manifest.py
+          fi
+
   detect-entries:
     name: Detect changed entries
     runs-on: ubuntu-latest
@@ -194,7 +215,7 @@ jobs:
 
   comment-results:
     name: Post results comment
-    needs: [detect-entries, schema, repo-accessibility, sbom, sast, signature]
+    needs: [manifest, detect-entries, schema, repo-accessibility, sbom, sast, signature]
     if: ${{ always() && needs.detect-entries.outputs.count != '0' }}
     runs-on: ubuntu-latest
     permissions:
@@ -202,6 +223,7 @@ jobs:
     steps:
       - uses: actions/github-script@v7
         env:
+          MANIFEST_RESULT: ${{ needs.manifest.result }}
           SCHEMA_RESULT: ${{ needs.schema.result }}
           REPO_RESULT: ${{ needs.repo-accessibility.result }}
           SBOM_RESULT: ${{ needs.sbom.result }}
@@ -214,6 +236,7 @@ jobs:
             const issue_number = context.payload.pull_request.number;
 
             const results = [
+              { name: 'Manifest',         result: process.env.MANIFEST_RESULT },
               { name: 'Schema',          result: process.env.SCHEMA_RESULT },
               { name: 'Repo accessible', result: process.env.REPO_RESULT },
               { name: 'SBOM',            result: process.env.SBOM_RESULT },

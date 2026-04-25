@@ -1,0 +1,18 @@
+# Fixture: registry.yaml without a policy_version field.
+#
+# This failure mode is enforced at the MANIFEST level, not the per-entry level.
+# The per-entry harness (tests/run_intake.py) cannot exercise this fixture
+# directly — use tests/test_manifest_validator.py instead.
+#
+# The manifest job in .github/workflows/intake.yml runs
+# scripts/intake/validate-manifest.py, which emits:
+#   {"check":"manifest","status":"fail","details":{"error":"policy_version is missing or not a string",...},"blocking":true}
+# and exits 1, blocking the PR.
+#
+# Documented here for human readers so the failure mode is visible alongside
+# the per-entry fixtures.
+section: _manifest
+key: _manifest
+entry: {}
+expect_exit: 1
+expect_error_contains: policy_version

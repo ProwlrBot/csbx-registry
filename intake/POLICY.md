@@ -155,7 +155,9 @@ Material changes to this policy (new required check, raised threshold, removed c
 1. Updates this document
 2. Updates the workflow and scripts in lockstep
 3. Adds a fixture demonstrating the new behavior
-4. Bumps the `policy_version` field in `registry.yaml` (top of file)
+4. Updates the `policy_version` field in `registry.yaml` (top of file) to the current ISO-8601 date
+
+The `policy_version` field is machine-enforced: the `manifest` job in `.github/workflows/intake.yml` runs `scripts/intake/validate-manifest.py` on every PR that touches `registry.yaml`. It rejects any PR where `policy_version` is missing or older than the value on `main`. You cannot merge a policy-touching PR without bumping this field.
 
 Authors of in-flight PRs are notified by a comment on their PR if a policy change would affect their entry.
 
