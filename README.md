@@ -84,3 +84,4 @@ Caido plugins additionally declare a `release` tag and a `signature` block — s
 | [`GOVERNANCE.md`](./GOVERNANCE.md) | Decision-making, no-self-merge, maintainer rotation |
 | [`MIGRATIONS.md`](./MIGRATIONS.md) | Schema migration process and version-bump workflow |
 | [`OFFLINE.md`](./OFFLINE.md) | Air-gap / offline workflow (prefetch, cosign Rekor bundle pre-resolution) |
+| [`INDEX.md`](./INDEX.md) | **Auto-generated** browsable catalog with cards per entry (do not edit) |
