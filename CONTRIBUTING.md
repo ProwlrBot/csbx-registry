@@ -43,6 +43,8 @@ my-plugin:
   tags: [tag1, tag2]                    # at least one
 ```
 
+`repo` may point at any of the **supported forges**: `github.com`, `gitlab.com`, `codeberg.org`. The intake workflow uses `scripts/intake/forge_adapter.py` to dispatch on the forge and call the right API. For non-GitHub forges, accessibility checks pass without any required token (public read API), but maintainers can configure `GITLAB_TOKEN` / `CODEBERG_TOKEN` repo secrets to raise rate limits — see [the workflow](./.github/workflows/intake.yml) for the env wiring. Other forges (bitbucket, sourcehut, self-hosted) are not currently supported; open an issue if you need one.
+
 Caido plugins additionally:
 
 ```yaml

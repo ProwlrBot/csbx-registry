@@ -1,0 +1,11 @@
+# Fixture: an entry whose upstream is hosted on codeberg.org rather than GitHub.
+# Schema validator must accept the codeberg URL; runtime accessibility check
+# uses the forge adapter to dispatch on host.
+section: plugins
+key: example-codeberg-tool
+entry:
+  repo: https://codeberg.org/example/example-tool
+  type: tool
+  description: "Example tool hosted on Codeberg used as a multi-forge fixture"
+  size: "1MB"
+  tags: [example, codeberg]

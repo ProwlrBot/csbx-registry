@@ -35,36 +35,46 @@ if [[ -z "$repo" || "$repo" == "null" ]]; then
   fail "missing repo URL for $ENTRY_NAME"
 fi
 
-# Extract owner/name from URL
-slug=$(printf '%s' "$repo" | sed -E 's|^https://github\.com/([^/]+/[^/]+)/?$|\1|')
-if [[ "$slug" == "$repo" ]]; then
-  fail "repo URL did not parse: $repo"
+# Resolve forge metadata via the Python adapter (covers GitHub, GitLab, Codeberg)
+forge_info=$(python3 "$(dirname "$0")/forge_adapter.py" info "$repo" 2>/dev/null || true)
+if [[ -z "$forge_info" ]] || jq -e '.error' <<<"$forge_info" >/dev/null 2>&1; then
+  fail "repo URL not supported by any forge adapter: $repo"
 fi
+forge=$(jq -r '.forge' <<<"$forge_info")
+slug=$(jq -r '.slug' <<<"$forge_info")
+api=$(jq -r '.api_repo_url' <<<"$forge_info")
 
-# Use the GitHub API; honor GITHUB_TOKEN if present (workflow provides it)
+# Auth: GitHub uses Bearer token; GitLab uses PRIVATE-TOKEN; Codeberg accepts
+# Bearer for the API. The workflow only injects GITHUB_TOKEN today; other forges
+# are public-API friendly so the absence of a token is acceptable for read.
 auth_args=()
-if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+if [[ "$forge" == "github" && -n "${GITHUB_TOKEN:-}" ]]; then
   auth_args=(-H "Authorization: Bearer $GITHUB_TOKEN")
+elif [[ "$forge" == "gitlab" && -n "${GITLAB_TOKEN:-}" ]]; then
+  auth_args=(-H "PRIVATE-TOKEN: $GITLAB_TOKEN")
+elif [[ "$forge" == "codeberg" && -n "${CODEBERG_TOKEN:-}" ]]; then
+  auth_args=(-H "Authorization: token $CODEBERG_TOKEN")
 fi
 
-api="https://api.github.com/repos/$slug"
 http_code=$(curl -s -o /tmp/intake-repo.json -w '%{http_code}' \
-  -H 'Accept: application/vnd.github+json' \
+  -H 'Accept: application/json' \
   "${auth_args[@]}" \
   "$api" || true)
 
 if [[ "$http_code" != "200" ]]; then
-  fail "GitHub API returned $http_code for $slug"
+  fail "$forge API returned $http_code for $slug"
 fi
 
-archived=$(jq -r '.archived' /tmp/intake-repo.json)
-private=$(jq -r '.private' /tmp/intake-repo.json)
+archived=$(jq -r '.archived // false' /tmp/intake-repo.json)
+# GitLab uses .visibility instead of .private
+private=$(jq -r 'if has("visibility") then (.visibility == "private")
+                 else (.private // false) end' /tmp/intake-repo.json)
 
 if [[ "$archived" == "true" ]]; then
-  fail "repo $slug is archived"
+  fail "repo $slug ($forge) is archived"
 fi
 if [[ "$private" == "true" ]]; then
-  fail "repo $slug is private"
+  fail "repo $slug ($forge) is private"
 fi
 
 # Caido plugins must point at a real release tag
@@ -73,14 +83,19 @@ if [[ "$type" == "caido-plugin" ]]; then
   if [[ -z "$release" ]]; then
     fail "caido-plugin $ENTRY_NAME missing release field"
   fi
+  release_info=$(python3 "$(dirname "$0")/forge_adapter.py" release "$repo" "$release" 2>/dev/null || true)
+  release_url=$(jq -r '.release_url // empty' <<<"$release_info")
+  if [[ -z "$release_url" ]]; then
+    fail "could not resolve release URL for $forge/$slug @ $release"
+  fi
   release_json=$(mktemp)
   rcode=$(curl -s -o "$release_json" -w '%{http_code}' \
-    -H 'Accept: application/vnd.github+json' \
+    -H 'Accept: application/json' \
     "${auth_args[@]}" \
-    "https://api.github.com/repos/$slug/releases/tags/$release" || true)
+    "$release_url" || true)
   if [[ "$rcode" != "200" ]]; then
     rm -f "$release_json"
-    fail "release tag $release not found in $slug (API returned $rcode)"
+    fail "release tag $release not found in $slug ($forge API returned $rcode)"
   fi
 fi
 

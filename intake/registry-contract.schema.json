@@ -165,7 +165,8 @@
     },
     "githubUrl": {
       "type": "string",
-      "pattern": "^https://github\\.com/[^/\\s]+/[^/\\s]+/?$"
+      "description": "Repo URL on a supported forge (github.com, gitlab.com, codeberg.org). Field name retained for backward compatibility; the validator now accepts multi-forge.",
+      "pattern": "^https://(?:github\\.com|gitlab\\.com|codeberg\\.org)/[^/\\s]+/[^/\\s]+/?$"
     }
   }
 }

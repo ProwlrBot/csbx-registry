@@ -46,7 +46,12 @@ SUPPORTED_PLATFORMS = {
     "windows-amd64", "windows-arm64",
 }
 
-GITHUB_REPO_RE = re.compile(r"^https://github\.com/[^/\s]+/[^/\s]+/?$")
+# Multi-forge: github, gitlab, codeberg. See scripts/intake/forge_adapter.py
+# for the canonical list — this regex is duplicated here only to avoid a
+# Python import in the per-entry validator.
+SUPPORTED_REPO_RE = re.compile(
+    r"^https://(?:github\.com|gitlab\.com|codeberg\.org)/[^/\s]+/[^/\s]+/?$"
+)
 
 
 def emit(status: str, details: dict[str, Any], blocking: bool = True) -> None:
@@ -90,9 +95,10 @@ def main() -> None:
             supported=sorted(SUPPORTED_TYPES),
         )
 
-    if not isinstance(entry["repo"], str) or not GITHUB_REPO_RE.match(entry["repo"]):
+    if not isinstance(entry["repo"], str) or not SUPPORTED_REPO_RE.match(entry["repo"]):
         fail(
-            f"entry {name!r} repo URL must match https://github.com/<owner>/<repo>",
+            f"entry {name!r} repo URL must point at a supported forge "
+            f"(github.com / gitlab.com / codeberg.org)",
             repo=entry["repo"],
         )
 
