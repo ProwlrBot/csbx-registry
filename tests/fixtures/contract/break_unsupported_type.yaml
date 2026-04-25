@@ -1,0 +1,16 @@
+# Contract break fixture: a `plugins` entry whose `type` is not in the supported
+# enum. The csbx CLI resolver maps `type` to an install backend; an unknown type
+# would silently fall through to no-op or the wrong backend.
+expect_violation_path: type
+registry:
+  version: 1
+  policy_version: "2026-04-25"
+  pdtm_tools: {}
+  plugins:
+    rogue-entry:
+      repo: https://github.com/example/rogue
+      type: cryptominer
+      description: "Entry with a contract-breaking type"
+      size: "1MB"
+      tags: [example]
+  caido_plugins: {}

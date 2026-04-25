@@ -1,0 +1,363 @@
+name: Plugin Intake Check
+
+on:
+  pull_request:
+    paths:
+      - 'registry.yaml'
+      - 'scripts/intake/**'
+      - 'intake/**'
+      - '.github/workflows/intake.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: intake-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  manifest:
+    name: Manifest policy_version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install Python deps
+        run: pip install --quiet pyyaml
+      - name: Validate manifest
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show "${BASE_SHA}:registry.yaml" > /tmp/base-registry.yaml || true
+          if [ -s /tmp/base-registry.yaml ]; then
+            BASE_REGISTRY_FILE=/tmp/base-registry.yaml ./scripts/intake/validate-manifest.py
+          else
+            ./scripts/intake/validate-manifest.py
+          fi
+
+  contract:
+    name: Consumer contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python deps
+        run: pip install --quiet pyyaml jsonschema
+      - name: Validate registry against contract schema
+        run: python3 tests/test_registry_contract.py
+
+  detect-entries:
+    name: Detect changed entries
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.diff.outputs.matrix }}
+      count: ${{ steps.diff.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install Python deps
+        run: pip install --quiet pyyaml
+
+      - name: Diff registry.yaml against base
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          git show "${BASE_SHA}:registry.yaml" > /tmp/base.yaml || : > /tmp/base.yaml
+          python3 scripts/intake/diff-entries.py \
+            --head registry.yaml \
+            --base /tmp/base.yaml
+
+  schema:
+    name: Schema (${{ matrix.key }})
+    needs: detect-entries
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python deps
+        run: pip install --quiet pyyaml
+      - name: Validate
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SECTION: ${{ matrix.section }}
+        run: ./scripts/intake/validate-schema.py
+
+  repo-accessibility:
+    name: Repo (${{ matrix.key }})
+    needs: detect-entries
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/intake/check-repo.sh
+
+  clone:
+    name: Clone (${{ matrix.key }})
+    needs: [detect-entries, schema, repo-accessibility]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    env:
+      ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+    steps:
+      - name: Clone target repo
+        run: |
+          REPO=$(echo "$ENTRY_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('repo',''))")
+          REL=$(echo "$ENTRY_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('release',''))")
+          mkdir -p clone-out
+          if [ -n "$REL" ]; then
+            git clone --depth 1 --branch "$REL" "$REPO" clone-out/src
+          else
+            git clone --depth 1 "$REPO" clone-out/src
+          fi
+          # Strip .git to halve artifact size
+          rm -rf clone-out/src/.git
+      - name: Upload clone artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clone-${{ matrix.key }}
+          path: clone-out/src
+          if-no-files-found: error
+          retention-days: 1
+
+  sbom:
+    name: SBOM (${{ matrix.key }})
+    needs: [detect-entries, schema, repo-accessibility, clone]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+      - name: Download cached clone
+        uses: actions/download-artifact@v4
+        with:
+          name: clone-${{ matrix.key }}
+          path: cached-clone
+      - name: Generate SBOM
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SBOM_OUT_DIR: ${{ github.workspace }}/sbom-out
+          CACHED_REPO_DIR: ${{ github.workspace }}/cached-clone
+        run: ./scripts/intake/generate-sbom.sh
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.key }}
+          path: sbom-out/sbom-${{ matrix.key }}.cdx.json
+          if-no-files-found: warn
+
+  cve:
+    name: CVE (${{ matrix.key }}) [informational]
+    needs: [detect-entries, schema, repo-accessibility, sbom]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+      - name: Download SBOM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom-${{ matrix.key }}
+          path: sbom-out
+      - name: Run CVE scan (non-blocking)
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SBOM_PATH: ${{ github.workspace }}/sbom-out/sbom-${{ matrix.key }}.cdx.json
+          CVE_OUT_DIR: ${{ github.workspace }}/cve-out
+        run: ./scripts/intake/run-cve-scan.sh
+      - name: Upload CVE artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cve-${{ matrix.key }}
+          path: cve-out/cve-${{ matrix.key }}.json
+          if-no-files-found: warn
+
+  sast:
+    name: SAST (${{ matrix.key }})
+    needs: [detect-entries, schema, repo-accessibility, clone]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    container:
+      image: returntocorp/semgrep:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq + git
+        run: apt-get update && apt-get install -y jq git
+      - name: Download cached clone
+        uses: actions/download-artifact@v4
+        with:
+          name: clone-${{ matrix.key }}
+          path: cached-clone
+      - name: Run SAST
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SAST_OUT_DIR: ${{ github.workspace }}/sast-out
+          CACHED_REPO_DIR: ${{ github.workspace }}/cached-clone
+        run: ./scripts/intake/run-sast.sh
+      - name: Upload SAST artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-${{ matrix.key }}
+          path: sast-out/sast-${{ matrix.key }}.json
+          if-no-files-found: warn
+
+  behavioral:
+    name: Behavioral (${{ matrix.key }}) [scaffold]
+    needs: [detect-entries, schema, repo-accessibility, clone]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download cached clone
+        uses: actions/download-artifact@v4
+        with:
+          name: clone-${{ matrix.key }}
+          path: cached-clone
+      - name: Run behavioral load test (scaffold)
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          CACHED_REPO_DIR: ${{ github.workspace }}/cached-clone
+          CAIDO_BINARY_AVAILABLE: ${{ vars.CAIDO_BINARY_AVAILABLE || 'false' }}
+          CAIDO_LOAD_TEST_OUT_DIR: ${{ github.workspace }}/caido-out
+        run: ./scripts/intake/caido-load-test.sh
+      - name: Upload behavioral artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behavioral-${{ matrix.key }}
+          path: caido-out
+          if-no-files-found: ignore
+
+  signature:
+    name: Signature (${{ matrix.key }})
+    needs: [detect-entries, schema, repo-accessibility]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.0'
+      - name: Install minisign
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y minisign
+      - name: Verify signature
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/intake/verify-signature.sh
+
+  comment-results:
+    name: Post results comment
+    needs: [manifest, contract, detect-entries, schema, repo-accessibility, sbom, sast, cve, signature]
+    if: ${{ always() && needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          MANIFEST_RESULT: ${{ needs.manifest.result }}
+          CONTRACT_RESULT: ${{ needs.contract.result }}
+          SCHEMA_RESULT: ${{ needs.schema.result }}
+          REPO_RESULT: ${{ needs.repo-accessibility.result }}
+          SBOM_RESULT: ${{ needs.sbom.result }}
+          SAST_RESULT: ${{ needs.sast.result }}
+          CVE_RESULT: ${{ needs.cve.result }}
+          SIG_RESULT: ${{ needs.signature.result }}
+          ENTRY_COUNT: ${{ needs.detect-entries.outputs.count }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            const results = [
+              { name: 'Manifest',         result: process.env.MANIFEST_RESULT },
+              { name: 'Contract',        result: process.env.CONTRACT_RESULT },
+              { name: 'Schema',          result: process.env.SCHEMA_RESULT },
+              { name: 'Repo accessible', result: process.env.REPO_RESULT },
+              { name: 'SBOM',            result: process.env.SBOM_RESULT },
+              { name: 'SAST',            result: process.env.SAST_RESULT },
+              { name: 'CVE (info)',      result: process.env.CVE_RESULT },
+              { name: 'Signature',       result: process.env.SIG_RESULT },
+            ];
+
+            const icon = (r) => r === 'success' ? ':white_check_mark:'
+                              : r === 'skipped' ? ':white_circle:'
+                              : r === 'failure' ? ':x:'
+                              : ':grey_question:';
+
+            const body = [
+              '## :package: Plugin Intake Check',
+              '',
+              '| Check | Result |',
+              '|-------|--------|',
+              ...results.map(r => `| ${r.name} | ${icon(r.result)} ${r.result} |`),
+              '',
+              `Touched entries: **${process.env.ENTRY_COUNT}**`,
+              '',
+              'Required checks must pass for `caido-plugin` entries; SAST is informational for other types.',
+              'See [`intake/POLICY.md`](../blob/main/intake/POLICY.md) for the full policy.',
+            ].join('\n');
+
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body.startsWith('## :package: Plugin Intake Check')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

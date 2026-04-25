@@ -1,0 +1,20 @@
+# Fixture: caido-plugin entry that declares a `platforms` array.
+# Schema validator must accept the optional field with valid platform identifiers.
+section: caido_plugins
+key: example-multiplatform-plugin
+entry:
+  repo: https://github.com/ProwlrBot/csbx-registry
+  type: caido-plugin
+  description: "Example Caido plugin declaring linux + darwin platform targets"
+  size: "2MB"
+  tags: [caido, http, example]
+  release: v0.0.1
+  manifest: caido.json
+  platforms:
+    - linux-amd64
+    - linux-arm64
+    - darwin-arm64
+  signature:
+    method: cosign
+    issuer: https://token.actions.githubusercontent.com
+    identity: https://github.com/example/multiplatform-plugin/.github/workflows/release.yml@refs/tags/v0.0.1

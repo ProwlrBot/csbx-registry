@@ -1,0 +1,140 @@
+name: Auto-removal of stale entries
+
+on:
+  schedule:
+    # Daily at 07:00 UTC. After the weekly stale-check workflow has had a
+    # chance to refresh issues, this opens removal PRs for entries that
+    # have been confirmed-stale beyond the grace period.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      grace_days:
+        description: 'Override the grace period in days'
+        required: false
+        default: '30'
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: stale-removal
+  cancel-in-progress: false
+
+jobs:
+  open-removal-prs:
+    name: Open removal PRs for stale entries past grace period
+    runs-on: ubuntu-latest
+    env:
+      GRACE_DAYS: ${{ github.event.inputs.grace_days || '30' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Python deps
+        run: pip install --quiet pyyaml
+
+      - name: Find stale issues past grace period and open removal PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const graceDays = parseInt(process.env.GRACE_DAYS || '30', 10);
+            const cutoff = new Date(Date.now() - graceDays * 24 * 3600 * 1000);
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: 'stale-entry', per_page: 100,
+            });
+
+            // Title shape from stale-check workflow:
+            //   "[stale-entry] <section>/<name>: <reason>"
+            const titleRe = /^\[stale-entry\] (pdtm_tools|plugins|caido_plugins)\/([^:]+):\s*(\S+)/;
+
+            // Collect existing auto-removal PRs to dedupe
+            const existingPRs = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const existingByName = new Set(
+              existingPRs
+                .filter(p => p.labels.some(l => l.name === 'auto-removal'))
+                .map(p => p.title)
+            );
+
+            // Ensure auto-removal label exists
+            try {
+              await github.rest.issues.createLabel({
+                owner, repo, name: 'auto-removal', color: 'd73a4a',
+                description: 'Auto-opened removal PR (manual merge required)',
+              });
+            } catch (e) { if (e.status !== 422) throw e; }
+
+            const eligible = issues.filter(i => {
+              if (!titleRe.test(i.title)) return false;
+              return new Date(i.created_at) < cutoff;
+            });
+
+            core.notice(`${eligible.length} eligible stale issue(s) past ${graceDays}d grace`);
+
+            const { execSync } = require('child_process');
+
+            for (const issue of eligible) {
+              const m = issue.title.match(titleRe);
+              const [, section, name, reason] = m;
+              const prTitle = `Remove stale entry ${section}/${name} (${reason})`;
+              if (existingByName.has(prTitle)) {
+                core.info(`Already a removal PR open: ${prTitle}`);
+                continue;
+              }
+
+              const branch = `auto-removal/${section}-${name.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+              try {
+                execSync(`git config user.name 'github-actions[bot]'`);
+                execSync(`git config user.email '41898282+github-actions[bot]@users.noreply.github.com'`);
+                execSync(`git checkout -B ${branch} origin/main`);
+                execSync(`python3 scripts/intake/remove-entry.py --section ${section} --name ${name}`,
+                         { stdio: 'inherit' });
+
+                const status = execSync('git status --porcelain').toString().trim();
+                if (!status) {
+                  core.warning(`Removal script produced no diff for ${section}/${name}; skipping`);
+                  continue;
+                }
+
+                execSync(`git add registry.yaml`);
+                execSync(`git commit -m "auto: remove stale ${section}/${name}\n\nClosed-via: #${issue.number}"`);
+                execSync(`git push -u origin ${branch} -f`);
+
+                const body = [
+                  `Auto-opened removal of stale entry \`${section}/${name}\` after ${graceDays}-day grace period.`,
+                  ``,
+                  `**Originating tracking issue:** #${issue.number}`,
+                  `**Detected reason:** \`${reason}\``,
+                  `**Issue opened:** ${issue.created_at}`,
+                  ``,
+                  `### Maintainer checklist before merging`,
+                  `- [ ] Confirm the upstream is still in the failure state described in #${issue.number}`,
+                  `- [ ] Confirm no recent commits or release activity that would invalidate the removal`,
+                  `- [ ] Confirm no in-flight PR is updating this entry`,
+                  ``,
+                  `_Auto-merge is intentionally NOT enabled — see [intake/POLICY.md](../blob/main/intake/POLICY.md) and roadmap feature-16. A maintainer must review and merge this PR manually._`,
+                ].join('\n');
+
+                const pr = await github.rest.pulls.create({
+                  owner, repo,
+                  title: prTitle,
+                  head: branch,
+                  base: 'main',
+                  body,
+                });
+                await github.rest.issues.addLabels({
+                  owner, repo, issue_number: pr.data.number,
+                  labels: ['auto-removal', 'stale-entry'],
+                });
+                core.notice(`Opened removal PR #${pr.data.number}: ${prTitle}`);
+              } catch (e) {
+                core.error(`Failed to open removal PR for ${section}/${name}: ${e.message}`);
+              }
+            }

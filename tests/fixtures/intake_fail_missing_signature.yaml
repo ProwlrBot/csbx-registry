@@ -1,0 +1,14 @@
+# Fixture: caido-plugin entry missing required signature block.
+# Schema validator MUST reject this with exit code 1.
+section: caido_plugins
+key: bad-no-signature
+entry:
+  repo: https://github.com/example/missing-sig
+  type: caido-plugin
+  description: "Caido plugin entry that is missing the required signature block"
+  size: "500KB"
+  tags: [caido]
+  release: v1.0.0
+  manifest: caido.json
+expect_exit: 1
+expect_error_contains: signature

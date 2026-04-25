@@ -1,0 +1,16 @@
+# Fixture: minisign-method caido-plugin entry missing the public_key field.
+# Schema validator MUST reject this with exit code 1.
+section: caido_plugins
+key: bad-minisign-no-pubkey
+entry:
+  repo: https://github.com/example/missing-pubkey
+  type: caido-plugin
+  description: "Caido plugin claims minisign but provides no public_key"
+  size: "500KB"
+  tags: [caido, minisign]
+  release: v1.0.0
+  manifest: caido.json
+  signature:
+    method: minisign
+expect_exit: 1
+expect_error_contains: public_key

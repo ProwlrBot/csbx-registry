@@ -1,0 +1,13 @@
+# Fixture: entry with a repo URL on an unsupported forge.
+# github.com, gitlab.com, codeberg.org are accepted (see scripts/intake/forge_adapter.py).
+# bitbucket.org is intentionally NOT supported and must be rejected at intake.
+section: plugins
+key: bad-url
+entry:
+  repo: https://bitbucket.org/example/not-supported
+  type: tool
+  description: "Entry whose repo URL points at an unsupported forge"
+  size: "1MB"
+  tags: [example]
+expect_exit: 1
+expect_error_contains: supported forge

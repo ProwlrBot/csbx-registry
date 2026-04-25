@@ -1,0 +1,18 @@
+# Contract break fixture: a caido_plugins entry without a signature block.
+# Strict-tier entries must declare a signature; the resolver branches on
+# signature.method to pick the verification path.
+expect_violation_path: signature
+registry:
+  version: 1
+  policy_version: "2026-04-25"
+  pdtm_tools: {}
+  plugins: {}
+  caido_plugins:
+    rogue-caido:
+      repo: https://github.com/example/rogue-caido
+      type: caido-plugin
+      description: "Caido plugin missing the required signature block"
+      size: "1MB"
+      tags: [caido]
+      release: v1.0.0
+      manifest: caido.json

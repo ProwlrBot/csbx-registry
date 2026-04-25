@@ -1,0 +1,71 @@
+rules:
+  - id: caido-eval-on-attacker-controlled-input
+    message: |
+      Calling eval() / new Function() on data that may originate from a
+      proxied HTTP request is a code-execution sink in Caido plugins. Use a
+      structured parser instead.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-95"
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+
+  - id: caido-hardcoded-api-key
+    message: |
+      Hardcoded API keys ship to every user of the plugin. Pull from the
+      Caido settings store or an environment variable instead.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-798"
+    patterns:
+      - pattern-regex: "(?i)(api[_-]?key|secret|token)\\s*[:=]\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+
+  - id: caido-shell-spawn-with-template-literal
+    message: |
+      Spawning a child process with a template-literal command is a shell
+      injection sink when any interpolated value is attacker-controlled.
+      Pass arguments as an array to spawn() instead.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-78"
+    patterns:
+      - pattern-either:
+          - pattern: child_process.exec(`...`)
+          - pattern: child_process.execSync(`...`)
+          - pattern: $X.exec(`...`)
+
+  - id: caido-write-outside-data-dir
+    message: |
+      Caido plugins should write only to the path returned by Caido's data
+      directory API. Writing to absolute paths or to ~/.* breaks Caido's
+      data lifecycle and may bypass user expectations.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: fs.writeFileSync("/...", ...)
+          - pattern: fs.writeFile("/...", ...)
+
+  - id: caido-unbounded-network-fetch
+    message: |
+      Plugins that fetch from a hardcoded external host should declare that
+      host in their manifest's network_allow list. Verify this destination
+      is documented for the user.
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata:
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: fetch("http://...", ...)
+          - pattern: fetch("https://...", ...)

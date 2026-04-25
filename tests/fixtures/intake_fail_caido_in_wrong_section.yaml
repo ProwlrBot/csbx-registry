@@ -1,0 +1,18 @@
+# Fixture: caido-plugin type placed in the legacy plugins section.
+# Schema validator must require caido-plugin entries to live under caido_plugins.
+section: plugins
+key: caido-in-wrong-section
+entry:
+  repo: https://github.com/example/caido-misplaced
+  type: caido-plugin
+  description: "Caido plugin mistakenly added under the wrong registry section"
+  size: "1MB"
+  tags: [caido]
+  release: v1.0.0
+  manifest: caido.json
+  signature:
+    method: cosign
+    issuer: https://token.actions.githubusercontent.com
+    identity: https://github.com/example/caido-misplaced/.github/workflows/release.yml@refs/tags/v1.0.0
+expect_exit: 1
+expect_error_contains: caido_plugins

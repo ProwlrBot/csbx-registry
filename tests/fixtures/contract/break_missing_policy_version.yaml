@@ -1,0 +1,9 @@
+# Contract break fixture: top-level policy_version missing. Defense-in-depth
+# alongside scripts/intake/validate-manifest.py — even if the manifest job is
+# bypassed, the resolver-side contract test catches the omission.
+expect_violation_path: ""
+registry:
+  version: 1
+  pdtm_tools: {}
+  plugins: {}
+  caido_plugins: {}

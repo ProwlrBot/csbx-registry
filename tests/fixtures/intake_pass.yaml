@@ -1,0 +1,16 @@
+# Fixture: a well-formed caido-plugin entry that should pass all checks.
+# Used by tests/run-intake.sh to assert the schema validator accepts it.
+section: caido_plugins
+key: example-good-plugin
+entry:
+  repo: https://github.com/ProwlrBot/csbx-registry
+  type: caido-plugin
+  description: "Example Caido plugin used as the canonical pass fixture for intake tests"
+  size: "1MB"
+  tags: [caido, http, example]
+  release: v0.0.1
+  manifest: caido.json
+  signature:
+    method: cosign
+    issuer: https://token.actions.githubusercontent.com
+    identity: https://github.com/example/caido-plugin/.github/workflows/release.yml@refs/tags/v0.0.1

@@ -1,0 +1,16 @@
+# Fixture: a well-formed caido-plugin entry using minisign signature method.
+# Schema validator must accept this; runtime minisign verification happens
+# in the GH Actions intake workflow against real .minisig assets.
+section: caido_plugins
+key: example-minisign-plugin
+entry:
+  repo: https://github.com/ProwlrBot/csbx-registry
+  type: caido-plugin
+  description: "Example Caido plugin using minisign as the signature method"
+  size: "1MB"
+  tags: [caido, http, example, minisign]
+  release: v0.0.1
+  manifest: caido.json
+  signature:
+    method: minisign
+    public_key: "RWQfaLPThpUXaqEf+34S2QBaW9R8tPlQk0L1qJqW9Q4dB5e0hEMx2bHE"

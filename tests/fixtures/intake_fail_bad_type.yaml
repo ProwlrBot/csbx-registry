@@ -1,0 +1,11 @@
+# Fixture: entry with an unsupported type.
+section: plugins
+key: bad-type
+entry:
+  repo: https://github.com/example/bad-type
+  type: not-a-real-type
+  description: "Entry with a type the schema does not recognise"
+  size: "1MB"
+  tags: [example]
+expect_exit: 1
+expect_error_contains: unsupported type
