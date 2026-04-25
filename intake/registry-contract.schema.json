@@ -160,6 +160,10 @@
             "sast_url": { "type": "string", "format": "uri" },
             "cve_url": { "type": "string", "format": "uri" }
           }
+        },
+        "behavioral_test": {
+          "type": "boolean",
+          "description": "Opt-in: when true, the intake's behavioral harness will attempt a live-load smoke test against a Caido instance. Currently scaffolded only — see scripts/intake/caido-load-test.sh and roadmap feature-13. Non-blocking regardless of outcome."
         }
       }
     },

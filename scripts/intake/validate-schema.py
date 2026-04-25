@@ -119,6 +119,9 @@ def main() -> None:
                 supported=sorted(SUPPORTED_PLATFORMS),
             )
 
+    if "behavioral_test" in entry and not isinstance(entry["behavioral_test"], bool):
+        fail(f"entry {name!r} behavioral_test must be a boolean")
+
     if entry["type"] == "caido-plugin":
         if section != "caido_plugins":
             fail(

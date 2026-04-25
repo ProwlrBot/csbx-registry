@@ -194,9 +194,14 @@ This gives you the same availability story as a mirror without making the regist
 ### NG-3 · Behavioral fuzzing of plugins at intake
 
 > **Decision:** csbx-registry does NOT run plugins against synthetic traffic, fuzz inputs, or otherwise exercise behavior at intake time.
+> **Status:** active — behavioral live-load smoke testing scaffolded (off by default, never blocking)
 > **Decided under policy_version:** `2026-04-25`
 
-The substitutes are SAST and manual review. Optional live-load smoke testing for `caido-plugin` (does the plugin load without crashing?) may be added later as a non-blocking signal — see roadmap feature-13.
+The substitutes are SAST and manual review.
+
+**What we DO offer (scaffold):** caido-plugin entries can opt in to a behavioral live-load test by setting `behavioral_test: true` on the entry. The intake job at `scripts/intake/caido-load-test.sh` will, when a Caido binary is available on the runner (gated on `vars.CAIDO_BINARY_AVAILABLE == 'true'`), stage the plugin into a headless Caido instance and assert it loads and accepts a no-op UI interaction without crashing. See the script for the documented harness contract.
+
+**Status as of policy_version 2026-04-25:** the harness body is not implemented because no CI-friendly Caido binary is currently distributed. The job slot exists so the runtime can be wired in later without a workflow refactor. Outcomes from the scaffold are always emitted as `skip` until the binary is available; outcomes from the eventual real harness will be informational regardless of result.
 
 ### NG-4 · Blocking on dependency CVEs
 

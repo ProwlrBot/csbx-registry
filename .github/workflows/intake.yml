@@ -279,6 +279,37 @@ jobs:
           path: sast-out/sast-${{ matrix.key }}.json
           if-no-files-found: warn
 
+  behavioral:
+    name: Behavioral (${{ matrix.key }}) [scaffold]
+    needs: [detect-entries, schema, repo-accessibility, clone]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download cached clone
+        uses: actions/download-artifact@v4
+        with:
+          name: clone-${{ matrix.key }}
+          path: cached-clone
+      - name: Run behavioral load test (scaffold)
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          CACHED_REPO_DIR: ${{ github.workspace }}/cached-clone
+          CAIDO_BINARY_AVAILABLE: ${{ vars.CAIDO_BINARY_AVAILABLE || 'false' }}
+          CAIDO_LOAD_TEST_OUT_DIR: ${{ github.workspace }}/caido-out
+        run: ./scripts/intake/caido-load-test.sh
+      - name: Upload behavioral artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behavioral-${{ matrix.key }}
+          path: caido-out
+          if-no-files-found: ignore
+
   signature:
     name: Signature (${{ matrix.key }})
     needs: [detect-entries, schema, repo-accessibility]
