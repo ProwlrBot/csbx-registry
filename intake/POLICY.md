@@ -261,6 +261,17 @@ A maintainer is expected to:
 
 The workflow is operationally independent from the PR-time intake (different trigger, different concurrency group, `issues: write` permission instead of `pull-requests: write`). A failed scan does not block PR merges; it only signals catalog rot.
 
+### Auto-opened removal PRs
+
+A second workflow at [`.github/workflows/stale-removal.yml`](../.github/workflows/stale-removal.yml) runs daily at 07:00 UTC. For every `stale-entry` issue older than the grace period (default **30 days**, overridable via `workflow_dispatch` input), it:
+
+1. Branches off `main` (`auto-removal/<section>-<name>`).
+2. Runs `scripts/intake/remove-entry.py --section <s> --name <n>` to delete the entry from `registry.yaml` while preserving surrounding structure.
+3. Opens a PR linked to the originating tracking issue, labelled `auto-removal` + `stale-entry`.
+4. **Does not enable auto-merge.** A maintainer must review and merge the PR manually — preserves the human review gate that the rest of the project depends on.
+
+This converts the boring half of catalog curation (typing `git rm` for an archived repo) into a reviewable diff while keeping the human in the loop. PRs are deduped on title; re-running the workflow does not create duplicate removals.
+
 ## Maintainer override
 
 A maintainer can merge a PR with a failed required check **only if**:
