@@ -1,0 +1,113 @@
+name: Persist Attestations
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'registry.yaml'
+  workflow_dispatch:
+    inputs:
+      entry_only:
+        description: 'Restrict to one section/key (e.g. caido_plugins/myplugin); empty means scan diff'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: persist-attestations
+  cancel-in-progress: false
+
+jobs:
+  resolve-entries:
+    name: Resolve entries to attest
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.diff.outputs.matrix }}
+      count: ${{ steps.diff.outputs.count }}
+    env:
+      ENTRY_ONLY: ${{ github.event.inputs.entry_only || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+      - name: Diff registry.yaml against parent
+        id: diff
+        run: |
+          set -euo pipefail
+          flatten() {
+            yq -o=json '
+              .pdtm_tools // {} as $p |
+              .plugins // {} as $reg |
+              .caido_plugins // {} as $caido |
+              ([$p | to_entries[] | {key:("pdtm_tools."+.key), value:.value}] +
+               [$reg | to_entries[] | {key:("plugins."+.key), value:.value}] +
+               [$caido | to_entries[] | {key:("caido_plugins."+.key), value:.value}])
+              | from_entries' "$1"
+          }
+          git show HEAD~1:registry.yaml > /tmp/parent.yaml 2>/dev/null || echo '{}' > /tmp/parent.yaml
+          flatten /tmp/parent.yaml > /tmp/parent.json
+          flatten registry.yaml > /tmp/head.json
+
+          if [ -n "$ENTRY_ONLY" ]; then
+            jq -nc --arg sel "$ENTRY_ONLY" --slurpfile head /tmp/head.json '
+              [$head[0] | to_entries[] | select(.key == $sel) |
+                {key:(.key|split(".")|.[1]),
+                 section:(.key|split(".")|.[0]),
+                 entry:.value}]' > /tmp/changed.json
+          else
+            jq -nc --slurpfile parent /tmp/parent.json --slurpfile head /tmp/head.json '
+              ($parent[0] // {}) as $p |
+              ($head[0] // {}) as $h |
+              [$h | to_entries[] | select(($p[.key] // null) != .value) |
+                {key:(.key|split(".")|.[1]),
+                 section:(.key|split(".")|.[0]),
+                 entry:.value}]' > /tmp/changed.json
+          fi
+          count=$(jq 'length' /tmp/changed.json)
+          echo "Entries to attest: $count"
+          jq '.' /tmp/changed.json
+          matrix=$(jq -c '{include:.}' /tmp/changed.json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+  attest:
+    name: Attest (${{ matrix.key }})
+    needs: resolve-entries
+    if: ${{ needs.resolve-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.resolve-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install syft + semgrep
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+          pip install --quiet semgrep
+      - name: Generate SBOM
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SBOM_OUT_DIR: ${{ github.workspace }}/attest-out
+        run: ./scripts/intake/generate-sbom.sh
+      - name: Run SAST
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SAST_OUT_DIR: ${{ github.workspace }}/attest-out
+        run: ./scripts/intake/run-sast.sh || true   # informational for non-caido types
+      - name: Upload to audit-archive branch
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_SECTION: ${{ matrix.section }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/intake/persist-to-archive.sh

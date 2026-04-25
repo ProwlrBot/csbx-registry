@@ -209,6 +209,34 @@ Per CVE noise being high (and most CVEs in plugin dependencies not being exploit
 
 If you think one of these should be added, open an issue with the format above (concrete failure mode + concrete owner). We will weigh added security against added friction.
 
+## Persistent attestation archive
+
+SBOM and SAST artifacts are written to two places:
+
+1. **GitHub Actions workflow artifacts** — created by the PR intake workflow, expire after 90 days. Useful for the PR's review window only.
+2. **The orphan [`audit-archive`](https://github.com/ProwlrBot/csbx-registry/tree/audit-archive) branch** — created by the [`Persist Attestations`](../.github/workflows/persist-attestations.yml) workflow on every push to `main`. **Durable beyond 90 days.**
+
+Layout under `audit-archive`:
+
+```
+<section>/<entry-name>/<release>/
+  sbom.cdx.json
+  sast.json         (caido_plugins only; informational for other types)
+  manifest.json     (provenance: upstream repo, release tag, intake SHA, timestamps)
+```
+
+Each registry entry can declare an `attestations` block with stable URLs into this branch:
+
+```yaml
+my-caido-plugin:
+  # ... other fields ...
+  attestations:
+    sbom_url: https://raw.githubusercontent.com/ProwlrBot/csbx-registry/audit-archive/caido_plugins/my-caido-plugin/v1.2.0/sbom.cdx.json
+    sast_url: https://raw.githubusercontent.com/ProwlrBot/csbx-registry/audit-archive/caido_plugins/my-caido-plugin/v1.2.0/sast.json
+```
+
+The contract schema (`intake/registry-contract.schema.json`) accepts the `attestations` block; INDEX.md surfaces these URLs as badges. Adding the block is optional — the artifacts exist on the orphan branch regardless — but linking them from the entry makes them discoverable.
+
 ## Scheduled stale-entry detection
 
 A separate workflow at [`.github/workflows/stale-check.yml`](../.github/workflows/stale-check.yml) runs weekly (Mondays 06:00 UTC) and exercises a lightweight version of [Check 2 — Repo accessibility](#check-2--repo-accessibility-required-all-entries) against every entry in `registry.yaml`.
