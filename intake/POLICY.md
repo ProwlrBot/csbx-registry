@@ -244,6 +244,8 @@ Material changes to this policy (new required check, raised threshold, removed c
 
 The `policy_version` field is machine-enforced: the `manifest` job in `.github/workflows/intake.yml` runs `scripts/intake/validate-manifest.py` on every PR that touches `registry.yaml`. It rejects any PR where `policy_version` is missing or older than the value on `main`. You cannot merge a policy-touching PR without bumping this field.
 
+Schema-version (`registry.yaml`'s top-level `version` field) bumps follow a separate, more involved process — see [`MIGRATIONS.md`](../MIGRATIONS.md). The validator's `SUPPORTED_VERSIONS` and `DEPRECATED_VERSIONS` sets gate which versions are accepted at intake; mechanical migrations live in `scripts/intake/migrate-registry.py`.
+
 Authors of in-flight PRs are notified by a comment on their PR if a policy change would affect their entry.
 
 ---

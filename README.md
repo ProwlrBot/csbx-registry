@@ -82,3 +82,4 @@ Caido plugins additionally declare a `release` tag and a `signature` block — s
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) | How to add or update entries |
 | [`intake/POLICY.md`](./intake/POLICY.md) | What the intake workflow checks and why |
 | [`GOVERNANCE.md`](./GOVERNANCE.md) | Decision-making, no-self-merge, maintainer rotation |
+| [`MIGRATIONS.md`](./MIGRATIONS.md) | Schema migration process and version-bump workflow |

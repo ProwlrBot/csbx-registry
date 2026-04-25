@@ -61,6 +61,17 @@ version: 1
 updated: "2026-04-25"
 """
 
+MISSING_VERSION = """\
+policy_version: "2026-04-25"
+updated: "2026-04-25"
+"""
+
+UNSUPPORTED_VERSION = """\
+version: 9999
+policy_version: "2026-04-25"
+updated: "2026-04-25"
+"""
+
 BASE = """\
 version: 1
 policy_version: "2026-04-25"
@@ -94,12 +105,30 @@ def test_newer_head_than_base() -> None:
     print("[PASS] head policy_version newer than base -> exit 0")
 
 
+def test_missing_version() -> None:
+    code, out = run(MISSING_VERSION)
+    assert code == 1, f"expected exit 1, got {code}\noutput: {out}"
+    assert "version" in out, f"expected 'version' in output\noutput: {out}"
+    print("[PASS] missing version -> exit 1")
+
+
+def test_unsupported_version() -> None:
+    code, out = run(UNSUPPORTED_VERSION)
+    assert code == 1, f"expected exit 1, got {code}\noutput: {out}"
+    assert "9999" in out or "not supported" in out, (
+        f"expected unsupported-version error\noutput: {out}"
+    )
+    print("[PASS] unsupported version -> exit 1")
+
+
 def main() -> int:
     tests = [
         test_missing_policy_version,
         test_present_policy_version,
         test_older_head_than_base,
         test_newer_head_than_base,
+        test_missing_version,
+        test_unsupported_version,
     ]
     failures = 0
     for t in tests:
