@@ -60,11 +60,8 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Install yq
-        run: |
-          sudo wget -qO /usr/local/bin/yq \
-            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+      - name: Install Python deps
+        run: pip install --quiet pyyaml
 
       - name: Diff registry.yaml against base
         id: diff
@@ -72,43 +69,10 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-
-          flatten() {
-            yq -o=json '
-              .pdtm_tools // {} as $p |
-              .plugins // {} as $reg |
-              .caido_plugins // {} as $caido |
-              ([$p | to_entries[] | {key: ("pdtm_tools." + .key), value: .value}] +
-               [$reg | to_entries[] | {key: ("plugins." + .key), value: .value}] +
-               [$caido | to_entries[] | {key: ("caido_plugins." + .key), value: .value}])
-              | from_entries' "$1"
-          }
-
-          git show "${BASE_SHA}:registry.yaml" > /tmp/base.yaml || echo '{}' > /tmp/base.yaml
-          flatten /tmp/base.yaml > /tmp/base.json
-          flatten registry.yaml > /tmp/head.json
-
-          jq -nc \
-            --slurpfile base /tmp/base.json \
-            --slurpfile head /tmp/head.json '
-            ($base[0] // {}) as $b |
-            ($head[0] // {}) as $h |
-            [$h | to_entries[] |
-              select(($b[.key] // null) != .value) |
-              {
-                key: (.key | split(".") | .[1]),
-                section: (.key | split(".") | .[0]),
-                entry: .value
-              }
-            ]' > /tmp/changed.json
-
-          count=$(jq 'length' /tmp/changed.json)
-          echo "Changed entries: $count"
-          jq '.' /tmp/changed.json
-
-          matrix=$(jq -c '{include: .}' /tmp/changed.json)
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
+          git show "${BASE_SHA}:registry.yaml" > /tmp/base.yaml || : > /tmp/base.yaml
+          python3 scripts/intake/diff-entries.py \
+            --head registry.yaml \
+            --base /tmp/base.yaml
 
   schema:
     name: Schema (${{ matrix.key }})

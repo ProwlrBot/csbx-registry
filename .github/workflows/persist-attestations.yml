@@ -32,50 +32,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
-      - name: Install yq
-        run: |
-          sudo wget -qO /usr/local/bin/yq \
-            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
+      - name: Install Python deps
+        run: pip install --quiet pyyaml
       - name: Diff registry.yaml against parent
         id: diff
         run: |
           set -euo pipefail
-          flatten() {
-            yq -o=json '
-              .pdtm_tools // {} as $p |
-              .plugins // {} as $reg |
-              .caido_plugins // {} as $caido |
-              ([$p | to_entries[] | {key:("pdtm_tools."+.key), value:.value}] +
-               [$reg | to_entries[] | {key:("plugins."+.key), value:.value}] +
-               [$caido | to_entries[] | {key:("caido_plugins."+.key), value:.value}])
-              | from_entries' "$1"
-          }
-          git show HEAD~1:registry.yaml > /tmp/parent.yaml 2>/dev/null || echo '{}' > /tmp/parent.yaml
-          flatten /tmp/parent.yaml > /tmp/parent.json
-          flatten registry.yaml > /tmp/head.json
-
+          git show HEAD~1:registry.yaml > /tmp/parent.yaml 2>/dev/null || : > /tmp/parent.yaml
           if [ -n "$ENTRY_ONLY" ]; then
-            jq -nc --arg sel "$ENTRY_ONLY" --slurpfile head /tmp/head.json '
-              [$head[0] | to_entries[] | select(.key == $sel) |
-                {key:(.key|split(".")|.[1]),
-                 section:(.key|split(".")|.[0]),
-                 entry:.value}]' > /tmp/changed.json
+            python3 scripts/intake/diff-entries.py --head registry.yaml --only "$ENTRY_ONLY"
           else
-            jq -nc --slurpfile parent /tmp/parent.json --slurpfile head /tmp/head.json '
-              ($parent[0] // {}) as $p |
-              ($head[0] // {}) as $h |
-              [$h | to_entries[] | select(($p[.key] // null) != .value) |
-                {key:(.key|split(".")|.[1]),
-                 section:(.key|split(".")|.[0]),
-                 entry:.value}]' > /tmp/changed.json
+            python3 scripts/intake/diff-entries.py --head registry.yaml --base /tmp/parent.yaml
           fi
-          count=$(jq 'length' /tmp/changed.json)
-          echo "Entries to attest: $count"
-          jq '.' /tmp/changed.json
-          matrix=$(jq -c '{include:.}' /tmp/changed.json)
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
 
   attest:
     name: Attest (${{ matrix.key }})
