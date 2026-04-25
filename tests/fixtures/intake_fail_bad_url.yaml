@@ -1,0 +1,11 @@
+# Fixture: entry with a non-GitHub repo URL.
+section: plugins
+key: bad-url
+entry:
+  repo: https://gitlab.com/example/not-on-github
+  type: tool
+  description: "Entry whose repo URL is not on github.com"
+  size: "1MB"
+  tags: [example]
+expect_exit: 1
+expect_error_contains: github.com

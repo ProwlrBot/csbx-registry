@@ -1,0 +1,250 @@
+name: Plugin Intake Check
+
+on:
+  pull_request:
+    paths:
+      - 'registry.yaml'
+      - 'scripts/intake/**'
+      - 'intake/**'
+      - '.github/workflows/intake.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: intake-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  detect-entries:
+    name: Detect changed entries
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.diff.outputs.matrix }}
+      count: ${{ steps.diff.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Diff registry.yaml against base
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          flatten() {
+            yq -o=json '
+              .pdtm_tools // {} as $p |
+              .plugins // {} as $reg |
+              .caido_plugins // {} as $caido |
+              ([$p | to_entries[] | {key: ("pdtm_tools." + .key), value: .value}] +
+               [$reg | to_entries[] | {key: ("plugins." + .key), value: .value}] +
+               [$caido | to_entries[] | {key: ("caido_plugins." + .key), value: .value}])
+              | from_entries' "$1"
+          }
+
+          git show "${BASE_SHA}:registry.yaml" > /tmp/base.yaml || echo '{}' > /tmp/base.yaml
+          flatten /tmp/base.yaml > /tmp/base.json
+          flatten registry.yaml > /tmp/head.json
+
+          jq -nc \
+            --slurpfile base /tmp/base.json \
+            --slurpfile head /tmp/head.json '
+            ($base[0] // {}) as $b |
+            ($head[0] // {}) as $h |
+            [$h | to_entries[] |
+              select(($b[.key] // null) != .value) |
+              {
+                key: (.key | split(".") | .[1]),
+                section: (.key | split(".") | .[0]),
+                entry: .value
+              }
+            ]' > /tmp/changed.json
+
+          count=$(jq 'length' /tmp/changed.json)
+          echo "Changed entries: $count"
+          jq '.' /tmp/changed.json
+
+          matrix=$(jq -c '{include: .}' /tmp/changed.json)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+  schema:
+    name: Schema (${{ matrix.key }})
+    needs: detect-entries
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python deps
+        run: pip install --quiet pyyaml
+      - name: Validate
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SECTION: ${{ matrix.section }}
+        run: ./scripts/intake/validate-schema.py
+
+  repo-accessibility:
+    name: Repo (${{ matrix.key }})
+    needs: detect-entries
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/intake/check-repo.sh
+
+  sbom:
+    name: SBOM (${{ matrix.key }})
+    needs: [detect-entries, schema, repo-accessibility]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+      - name: Generate SBOM
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SBOM_OUT_DIR: ${{ github.workspace }}/sbom-out
+        run: ./scripts/intake/generate-sbom.sh
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.key }}
+          path: sbom-out/sbom-${{ matrix.key }}.cdx.json
+          if-no-files-found: warn
+
+  sast:
+    name: SAST (${{ matrix.key }})
+    needs: [detect-entries, schema, repo-accessibility]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    container:
+      image: returntocorp/semgrep:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq + git
+        run: apt-get update && apt-get install -y jq git
+      - name: Run SAST
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SAST_OUT_DIR: ${{ github.workspace }}/sast-out
+        run: ./scripts/intake/run-sast.sh
+      - name: Upload SAST artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-${{ matrix.key }}
+          path: sast-out/sast-${{ matrix.key }}.json
+          if-no-files-found: warn
+
+  signature:
+    name: Signature (${{ matrix.key }})
+    needs: [detect-entries, schema, repo-accessibility]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.0'
+      - name: Verify signature
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./scripts/intake/verify-signature.sh
+
+  comment-results:
+    name: Post results comment
+    needs: [detect-entries, schema, repo-accessibility, sbom, sast, signature]
+    if: ${{ always() && needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          SCHEMA_RESULT: ${{ needs.schema.result }}
+          REPO_RESULT: ${{ needs.repo-accessibility.result }}
+          SBOM_RESULT: ${{ needs.sbom.result }}
+          SAST_RESULT: ${{ needs.sast.result }}
+          SIG_RESULT: ${{ needs.signature.result }}
+          ENTRY_COUNT: ${{ needs.detect-entries.outputs.count }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+
+            const results = [
+              { name: 'Schema',          result: process.env.SCHEMA_RESULT },
+              { name: 'Repo accessible', result: process.env.REPO_RESULT },
+              { name: 'SBOM',            result: process.env.SBOM_RESULT },
+              { name: 'SAST',            result: process.env.SAST_RESULT },
+              { name: 'Signature',       result: process.env.SIG_RESULT },
+            ];
+
+            const icon = (r) => r === 'success' ? ':white_check_mark:'
+                              : r === 'skipped' ? ':white_circle:'
+                              : r === 'failure' ? ':x:'
+                              : ':grey_question:';
+
+            const body = [
+              '## :package: Plugin Intake Check',
+              '',
+              '| Check | Result |',
+              '|-------|--------|',
+              ...results.map(r => `| ${r.name} | ${icon(r.result)} ${r.result} |`),
+              '',
+              `Touched entries: **${process.env.ENTRY_COUNT}**`,
+              '',
+              'Required checks must pass for `caido-plugin` entries; SAST is informational for other types.',
+              'See [`intake/POLICY.md`](../blob/main/intake/POLICY.md) for the full policy.',
+            ].join('\n');
+
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body.startsWith('## :package: Plugin Intake Check')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

@@ -1,6 +1,6 @@
 # csbx-registry
 
-Plugin registry for [CyberSandbox](https://github.com/kdairatchi/cybersandbox).
+Plugin registry for [CyberSandbox](https://github.com/kdairatchi/cybersandbox) and a community catalog for [Caido](https://caido.io) plugins.
 
 ## Install a plugin
 
@@ -13,16 +13,19 @@ csbx search fuzzing
 
 ## Submit a plugin
 
-1. Create a git repo with your tool, wordlist, templates, or theme
-2. Add a `csbx.yaml` at the repo root (see spec below)
+1. Create a git repo with your tool, wordlist, templates, theme, or Caido plugin
+2. Add a `csbx.yaml` at the repo root (see spec below). For Caido plugins, also ship a Caido manifest in your release artifact.
 3. Open a PR adding your entry to `registry.yaml`
+4. The **Plugin Intake Check** workflow runs automatically — see [`CONTRIBUTING.md`](./CONTRIBUTING.md) and [`intake/POLICY.md`](./intake/POLICY.md) for what it does and how to pass.
+
+You do **not** need to be a CyberBox author. Any well-maintained plugin meeting the intake policy is welcome.
 
 ### csbx.yaml spec
 
 ```yaml
 name: my-plugin
 version: "1.0.0"
-type: tool              # tool | wordlist | nuclei-templates | theme | config
+type: tool              # tool | wordlist | nuclei-templates | theme | config | caido-plugin
 description: "What it does"
 author: your-github-handle
 
@@ -43,17 +46,23 @@ tags: [recon, xss, fuzzing]
 
 ### Plugin types
 
-| Type | Where it installs | Use case |
-|------|-------------------|----------|
-| `tool` | `~/.csbx/plugins/tools/` | CLI binaries |
-| `wordlist` | `~/.csbx/plugins/wordlists/` | Fuzzing / discovery lists |
-| `nuclei-templates` | `~/.csbx/plugins/nuclei-templates/` | Scan templates |
-| `theme` | `~/.csbx/plugins/themes/` | Shell themes / prompts |
-| `config` | `~/.csbx/plugins/configs/` | Dotfiles, patterns, configs |
+| Type | Where it installs | Use case | Intake policy |
+|------|-------------------|----------|---------------|
+| `tool` | `~/.csbx/plugins/tools/` | CLI binaries | Standard |
+| `wordlist` | `~/.csbx/plugins/wordlists/` | Fuzzing / discovery lists | Standard |
+| `nuclei-templates` | `~/.csbx/plugins/nuclei-templates/` | Scan templates | Standard |
+| `theme` | `~/.csbx/plugins/themes/` | Shell themes / prompts | Standard |
+| `config` | `~/.csbx/plugins/configs/` | Dotfiles, patterns, configs | Standard |
+| `caido-plugin` | `~/.caido/plugins/` (resolved by `csbx install --caido`) | Plugins for the Caido HTTP toolkit | **Strict** — cosign signature, SBOM, and SAST required to merge |
+
+**Standard** = schema check, repo verify, SBOM generation, informational SAST.
+**Strict** = standard plus required cosign signature verification and blocking SAST on HIGH/CRITICAL findings.
+
+See [`intake/POLICY.md`](./intake/POLICY.md) for the full breakdown.
 
 ## Registry format
 
-`registry.yaml` is a flat list. Each entry:
+`registry.yaml` is a flat list grouped by section. Each entry:
 
 ```yaml
 my-plugin:
@@ -63,3 +72,5 @@ my-plugin:
   size: "10MB"
   tags: [recon, xss]
 ```
+
+Caido plugins additionally declare a `release` tag and a `signature` block — see CONTRIBUTING for the full schema.
