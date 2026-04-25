@@ -191,6 +191,20 @@ Per CVE noise being high (and most CVEs in plugin dependencies not being exploit
 
 If you think one of these should be added, open an issue with the format above (concrete failure mode + concrete owner). We will weigh added security against added friction.
 
+## Scheduled stale-entry detection
+
+A separate workflow at [`.github/workflows/stale-check.yml`](../.github/workflows/stale-check.yml) runs weekly (Mondays 06:00 UTC) and exercises a lightweight version of [Check 2 — Repo accessibility](#check-2--repo-accessibility-required-all-entries) against every entry in `registry.yaml`.
+
+When an entry's upstream becomes archived, deleted (404), made private, or — for `caido-plugin` entries — has its declared release tag removed, the workflow auto-opens an issue with the `stale-entry` label. Issues are deduplicated on `(entry, reason)`; a re-run that sees the same condition appends a comment to the existing issue rather than opening a new one.
+
+A maintainer is expected to:
+
+1. Confirm the finding by visiting the upstream repo manually.
+2. Open a removal PR if the entry is genuinely stale, or close the issue with a comment if the condition was transient.
+3. Re-running the workflow under `workflow_dispatch` is supported and useful when investigating intermittent failures.
+
+The workflow is operationally independent from the PR-time intake (different trigger, different concurrency group, `issues: write` permission instead of `pull-requests: write`). A failed scan does not block PR merges; it only signals catalog rot.
+
 ## Maintainer override
 
 A maintainer can merge a PR with a failed required check **only if**:

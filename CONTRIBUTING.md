@@ -105,7 +105,9 @@ If a plugin changes its repo URL, type, or release tag, open a PR updating the e
 
 ## Removing a plugin
 
-Open an issue. Plugins get removed if:
+A weekly **Stale Entry Check** workflow (`.github/workflows/stale-check.yml`) auto-opens an issue with the `stale-entry` label when an upstream repo is archived, deleted, made private, or has its declared release tag removed. If your entry shows up there, expect a maintainer to follow up with a removal PR within a few days.
+
+You can also open an issue manually. Plugins get removed if:
 
 - The source repo is deleted, archived, or made private
 - The maintainer requests removal
