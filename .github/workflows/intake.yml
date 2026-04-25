@@ -146,9 +146,40 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./scripts/intake/check-repo.sh
 
+  clone:
+    name: Clone (${{ matrix.key }})
+    needs: [detect-entries, schema, repo-accessibility]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    env:
+      ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+    steps:
+      - name: Clone target repo
+        run: |
+          REPO=$(echo "$ENTRY_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('repo',''))")
+          REL=$(echo "$ENTRY_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin).get('release',''))")
+          mkdir -p clone-out
+          if [ -n "$REL" ]; then
+            git clone --depth 1 --branch "$REL" "$REPO" clone-out/src
+          else
+            git clone --depth 1 "$REPO" clone-out/src
+          fi
+          # Strip .git to halve artifact size
+          rm -rf clone-out/src/.git
+      - name: Upload clone artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clone-${{ matrix.key }}
+          path: clone-out/src
+          if-no-files-found: error
+          retention-days: 1
+
   sbom:
     name: SBOM (${{ matrix.key }})
-    needs: [detect-entries, schema, repo-accessibility]
+    needs: [detect-entries, schema, repo-accessibility, clone]
     if: ${{ needs.detect-entries.outputs.count != '0' }}
     runs-on: ubuntu-latest
     strategy:
@@ -160,11 +191,17 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
             | sudo sh -s -- -b /usr/local/bin
+      - name: Download cached clone
+        uses: actions/download-artifact@v4
+        with:
+          name: clone-${{ matrix.key }}
+          path: cached-clone
       - name: Generate SBOM
         env:
           ENTRY_NAME: ${{ matrix.key }}
           ENTRY_JSON: ${{ toJSON(matrix.entry) }}
           SBOM_OUT_DIR: ${{ github.workspace }}/sbom-out
+          CACHED_REPO_DIR: ${{ github.workspace }}/cached-clone
         run: ./scripts/intake/generate-sbom.sh
       - name: Upload SBOM artifact
         if: always()
@@ -176,7 +213,7 @@ jobs:
 
   sast:
     name: SAST (${{ matrix.key }})
-    needs: [detect-entries, schema, repo-accessibility]
+    needs: [detect-entries, schema, repo-accessibility, clone]
     if: ${{ needs.detect-entries.outputs.count != '0' }}
     runs-on: ubuntu-latest
     strategy:
@@ -188,11 +225,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install jq + git
         run: apt-get update && apt-get install -y jq git
+      - name: Download cached clone
+        uses: actions/download-artifact@v4
+        with:
+          name: clone-${{ matrix.key }}
+          path: cached-clone
       - name: Run SAST
         env:
           ENTRY_NAME: ${{ matrix.key }}
           ENTRY_JSON: ${{ toJSON(matrix.entry) }}
           SAST_OUT_DIR: ${{ github.workspace }}/sast-out
+          CACHED_REPO_DIR: ${{ github.workspace }}/cached-clone
         run: ./scripts/intake/run-sast.sh
       - name: Upload SAST artifact
         if: always()

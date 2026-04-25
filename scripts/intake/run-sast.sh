@@ -35,16 +35,24 @@ if ! command -v semgrep >/dev/null 2>&1; then
   exit 1
 fi
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
-
-clone_args=(--depth 1)
-[[ "$release" != "HEAD" ]] && clone_args+=(--branch "$release")
-git clone "${clone_args[@]}" "$repo" "$work/src" >/dev/null 2>&1 || {
-  printf '[-] sast: clone failed\n' >&2
-  emit "fail" "$(jq -nc --arg r "$repo" '{error:"clone failed",repo:$r}')" "true"
-  exit 1
-}
+# CACHED_REPO_DIR optimization (see generate-sbom.sh)
+work=""
+src=""
+if [[ -n "${CACHED_REPO_DIR:-}" && -d "$CACHED_REPO_DIR" ]]; then
+  src="$CACHED_REPO_DIR"
+  printf '[+] sast: using cached clone at %s\n' "$src" >&2
+else
+  work=$(mktemp -d)
+  trap 'rm -rf "$work"' EXIT
+  clone_args=(--depth 1)
+  [[ "$release" != "HEAD" ]] && clone_args+=(--branch "$release")
+  git clone "${clone_args[@]}" "$repo" "$work/src" >/dev/null 2>&1 || {
+    printf '[-] sast: clone failed\n' >&2
+    emit "fail" "$(jq -nc --arg r "$repo" '{error:"clone failed",repo:$r}')" "true"
+    exit 1
+  }
+  src="$work/src"
+fi
 
 out="$SAST_OUT_DIR/sast-$ENTRY_NAME.json"
 caido_rules="$(dirname "$0")/../../intake/semgrep-caido.yml"
@@ -59,7 +67,7 @@ semgrep "${configs[@]}" \
   --metrics=off \
   --json -o "$out" \
   --no-error \
-  "$work/src" >/dev/null 2>/tmp/semgrep.err || true
+  "$src" >/dev/null 2>/tmp/semgrep.err || true
 
 if [[ ! -s "$out" ]]; then
   printf '[-] sast: semgrep produced no output\n' >&2
