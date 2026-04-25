@@ -1,3 +1,11 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Local offline cache (created by tools/prefetch.py)
+offline-cache/
+
 # Auto Claude data directory
 .auto-claude/
 
