@@ -41,6 +41,14 @@ if [[ ! -f "$sbom_src" ]]; then
   exit 1
 fi
 
+# Configure git identity up-front. Both the orphan-branch bootstrap and the
+# attestation commit use it; the GH Actions runner doesn't have one by default.
+# Use --global so the worktree (a separate working copy with its own .git
+# index) inherits it without re-configuring.
+git config --global user.name 'github-actions[bot]'
+git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
 # Use a worktree pointed at the audit-archive branch so we don't disturb the
 # main checkout. Initialise the orphan branch on first use.
 worktree=$(mktemp -d)
@@ -102,8 +110,6 @@ cat > "$target_dir/manifest.json" <<MANIFEST
 MANIFEST
 
 # Idempotent commit
-git config user.name 'github-actions[bot]'
-git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 git add "$target_dir"
 if git diff --cached --quiet; then
   echo "[+] persist: $target_dir unchanged; skipping commit"
