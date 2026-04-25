@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ProwlrBot/csbx-registry/intake/registry-contract.schema.json",
+  "title": "csbx-registry consumer contract",
+  "description": "Structural contract that the csbx CLI resolver and any other downstream consumer can pin against. Describes the SHAPE of registry.yaml — not semantic validity (URL liveness, signature correctness) which is checked by intake scripts.",
+  "type": "object",
+  "required": ["version", "policy_version", "pdtm_tools", "plugins", "caido_plugins"],
+  "additionalProperties": true,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "description": "Registry schema version. Bumped via the migration process documented in MIGRATIONS.md.",
+      "minimum": 1
+    },
+    "policy_version": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "ISO-8601 date matching intake/POLICY.md's 'Last reviewed' line. Enforced non-decrease by scripts/intake/validate-manifest.py."
+    },
+    "updated": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "Last meaningful change to the catalog. Informational — not enforced."
+    },
+    "pdtm_tools": {
+      "type": "object",
+      "description": "ProjectDiscovery-style Go tools resolved through `csbx pdtm`. Keys are the tool name as users invoke it.",
+      "additionalProperties": { "$ref": "#/$defs/pdtmEntry" }
+    },
+    "plugins": {
+      "type": "object",
+      "description": "Standard-tier plugins (wordlists, nuclei templates, configs, YARA, Sigma, threat-intel, themes). Keys are the entry name as users invoke `csbx install <key>`.",
+      "additionalProperties": { "$ref": "#/$defs/pluginEntry" }
+    },
+    "caido_plugins": {
+      "type": "object",
+      "description": "Strict-tier Caido plugins. Cosign keyless verification + blocking SAST required. Keys are the plugin name as users invoke `csbx install --caido <key>`.",
+      "additionalProperties": { "$ref": "#/$defs/caidoPluginEntry" }
+    }
+  },
+  "$defs": {
+    "pdtmEntry": {
+      "type": "object",
+      "required": ["repo", "install_type", "go_install_path", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$",
+          "description": "GitHub slug, e.g. projectdiscovery/subfinder"
+        },
+        "install_type": {
+          "type": "string",
+          "enum": ["go"]
+        },
+        "go_install_path": {
+          "type": "string",
+          "description": "Argument to `go install` — module path with optional /vN and /cmd/<name> suffixes."
+        },
+        "version": {
+          "type": "string",
+          "description": "`latest` or a pinned semver/tag."
+        }
+      }
+    },
+    "pluginEntry": {
+      "type": "object",
+      "required": ["repo", "type", "description", "size", "tags"],
+      "additionalProperties": false,
+      "properties": {
+        "repo": { "$ref": "#/$defs/githubUrl" },
+        "type": {
+          "type": "string",
+          "enum": ["tool", "wordlist", "nuclei-templates", "yara-rules", "sigma", "threat-intel", "theme", "config"]
+        },
+        "description": { "type": "string", "minLength": 10 },
+        "size": { "type": "string", "pattern": "^[0-9.]+ ?(KB|MB|GB)$" },
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "platforms": {
+          "type": "array",
+          "description": "Optional declared install targets, used by per-platform release-asset checks. See feature-6.",
+          "items": {
+            "type": "string",
+            "enum": ["linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64", "windows-arm64"]
+          }
+        }
+      }
+    },
+    "caidoPluginEntry": {
+      "type": "object",
+      "required": ["repo", "type", "description", "size", "tags", "release", "manifest", "signature"],
+      "additionalProperties": false,
+      "properties": {
+        "repo": { "$ref": "#/$defs/githubUrl" },
+        "type": { "type": "string", "const": "caido-plugin" },
+        "description": { "type": "string", "minLength": 10 },
+        "size": { "type": "string", "pattern": "^[0-9.]+ ?(KB|MB|GB)$" },
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "release": {
+          "type": "string",
+          "description": "Git tag (e.g. v1.2.0) the intake workflow will pull."
+        },
+        "manifest": {
+          "type": "string",
+          "description": "Path to the Caido manifest within the release artifact (e.g. caido.json)."
+        },
+        "signature": {
+          "type": "object",
+          "required": ["method"],
+          "additionalProperties": false,
+          "properties": {
+            "method": { "type": "string", "enum": ["cosign", "minisign"] },
+            "issuer": {
+              "type": "string",
+              "format": "uri",
+              "description": "OIDC issuer for cosign keyless. Required when method=cosign."
+            },
+            "identity": {
+              "type": "string",
+              "format": "uri",
+              "description": "OIDC subject identity for cosign keyless. Required when method=cosign."
+            },
+            "public_key": {
+              "type": "string",
+              "description": "Path or URL to the minisign public key. Required when method=minisign."
+            }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "method": { "const": "cosign" } } },
+              "then": { "required": ["issuer", "identity"] }
+            },
+            {
+              "if": { "properties": { "method": { "const": "minisign" } } },
+              "then": { "required": ["public_key"] }
+            }
+          ]
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64", "windows-arm64"]
+          }
+        },
+        "attestations": {
+          "type": "object",
+          "description": "Persistent links to SBOM/SAST/CVE artifacts. See feature-3.",
+          "additionalProperties": false,
+          "properties": {
+            "sbom_url": { "type": "string", "format": "uri" },
+            "sast_url": { "type": "string", "format": "uri" },
+            "cve_url": { "type": "string", "format": "uri" }
+          }
+        }
+      }
+    },
+    "githubUrl": {
+      "type": "string",
+      "pattern": "^https://github\\.com/[^/\\s]+/[^/\\s]+/?$"
+    }
+  }
+}
