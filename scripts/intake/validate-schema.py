@@ -123,6 +123,9 @@ def main() -> None:
             for k in ("issuer", "identity"):
                 if k not in sig or not isinstance(sig[k], str):
                     fail(f"caido-plugin {name!r} signature.{k} required for cosign")
+        elif sig["method"] == "minisign":
+            if "public_key" not in sig or not isinstance(sig["public_key"], str):
+                fail(f"caido-plugin {name!r} signature.public_key required for minisign")
 
     emit("pass", {"name": name, "type": entry["type"], "section": section})
 

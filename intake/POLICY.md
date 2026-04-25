@@ -128,6 +128,24 @@ signature:
 
 If you genuinely cannot use cosign (e.g. self-hosted runner with no OIDC), use `method: minisign` and pin a public key. Maintainers reserve the right to decline minisign entries that look like an attempt to evade keyless attestation.
 
+#### Minisign — accepted-but-discouraged path
+
+For `method: minisign`, the entry must declare `signature.public_key`. The validator (`scripts/intake/validate-schema.py`) enforces presence; the runtime path in `scripts/intake/verify-signature.sh` resolves the key as one of:
+
+1. An inline base64 minisign public-key string (recommended — the registry entry is the trust root, no extra fetch).
+2. An `https://` URL pointing at the public key file.
+3. A path inside the repo (rarely useful in CI; documented for completeness).
+
+The release artifact must include a detached `.minisig` next to the primary asset. The runtime invokes `minisign -V -p <key> -m <artifact> -x <artifact>.minisig`.
+
+```yaml
+signature:
+  method: minisign
+  public_key: "RWQfaLPThpUXaqEf+34S2QBaW9R8tPlQk0L1qJqW9Q4dB5e0hEMx2bHE"
+```
+
+A tampered artifact or wrong-key fixture must produce a non-zero exit from `verify-signature.sh` — this is exercised by fixtures under `tests/fixtures/`.
+
 ## Non-goals
 
 These are deliberate, versioned decisions — not oversights. Each is dated and tied to the `policy_version` so a future revisit can read the rationale before relitigating it.

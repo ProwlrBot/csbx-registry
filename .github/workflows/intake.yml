@@ -216,6 +216,10 @@ jobs:
         uses: sigstore/cosign-installer@v3
         with:
           cosign-release: 'v2.4.0'
+      - name: Install minisign
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qq -y minisign
       - name: Verify signature
         env:
           ENTRY_NAME: ${{ matrix.key }}
