@@ -211,6 +211,40 @@ jobs:
           path: sbom-out/sbom-${{ matrix.key }}.cdx.json
           if-no-files-found: warn
 
+  cve:
+    name: CVE (${{ matrix.key }}) [informational]
+    needs: [detect-entries, schema, repo-accessibility, sbom]
+    if: ${{ needs.detect-entries.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-entries.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install grype
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh \
+            | sudo sh -s -- -b /usr/local/bin
+      - name: Download SBOM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom-${{ matrix.key }}
+          path: sbom-out
+      - name: Run CVE scan (non-blocking)
+        env:
+          ENTRY_NAME: ${{ matrix.key }}
+          ENTRY_JSON: ${{ toJSON(matrix.entry) }}
+          SBOM_PATH: ${{ github.workspace }}/sbom-out/sbom-${{ matrix.key }}.cdx.json
+          CVE_OUT_DIR: ${{ github.workspace }}/cve-out
+        run: ./scripts/intake/run-cve-scan.sh
+      - name: Upload CVE artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cve-${{ matrix.key }}
+          path: cve-out/cve-${{ matrix.key }}.json
+          if-no-files-found: warn
+
   sast:
     name: SAST (${{ matrix.key }})
     needs: [detect-entries, schema, repo-accessibility, clone]
@@ -272,7 +306,7 @@ jobs:
 
   comment-results:
     name: Post results comment
-    needs: [manifest, contract, detect-entries, schema, repo-accessibility, sbom, sast, signature]
+    needs: [manifest, contract, detect-entries, schema, repo-accessibility, sbom, sast, cve, signature]
     if: ${{ always() && needs.detect-entries.outputs.count != '0' }}
     runs-on: ubuntu-latest
     permissions:
@@ -286,6 +320,7 @@ jobs:
           REPO_RESULT: ${{ needs.repo-accessibility.result }}
           SBOM_RESULT: ${{ needs.sbom.result }}
           SAST_RESULT: ${{ needs.sast.result }}
+          CVE_RESULT: ${{ needs.cve.result }}
           SIG_RESULT: ${{ needs.signature.result }}
           ENTRY_COUNT: ${{ needs.detect-entries.outputs.count }}
         with:
@@ -300,6 +335,7 @@ jobs:
               { name: 'Repo accessible', result: process.env.REPO_RESULT },
               { name: 'SBOM',            result: process.env.SBOM_RESULT },
               { name: 'SAST',            result: process.env.SAST_RESULT },
+              { name: 'CVE (info)',      result: process.env.CVE_RESULT },
               { name: 'Signature',       result: process.env.SIG_RESULT },
             ];
 

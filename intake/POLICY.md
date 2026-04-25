@@ -201,9 +201,14 @@ The substitutes are SAST and manual review. Optional live-load smoke testing for
 ### NG-4 · Blocking on dependency CVEs
 
 > **Decision:** csbx-registry does NOT block merge on CVE counts in the SBOM.
+> **Status:** active — informational signal ENABLED (non-blocking)
 > **Decided under policy_version:** `2026-04-25`
 
-Per CVE noise being high (and most CVEs in plugin dependencies not being exploitable in the plugin's actual code path), gating on CVE count would generate review fatigue without proportional security gain. Informational CVE signal in PR comments may be added as a non-blocking enhancement — see roadmap feature-12. If we add it, this decision is revised to "informational, not gating," with `policy_version` bumped accordingly.
+Per CVE noise being high (and most CVEs in plugin dependencies not being exploitable in the plugin's actual code path), gating on CVE count would generate review fatigue without proportional security gain.
+
+**What we DO offer:** an opt-in [grype](https://github.com/anchore/grype) scan runs on every PR (the `CVE (info)` job in `.github/workflows/intake.yml`). It scans the just-generated SBOM and posts a summary count by severity to the PR comment. The result is **never blocking**; maintainers may use the signal as input to their review judgment but are explicitly free to merge over CVE findings. The CVE artifact is uploaded alongside the SBOM and SAST artifacts and persisted to the `audit-archive` branch on push to main.
+
+This distinguishes "informational CVE signal" (now offered) from "CVE gating" (still a non-goal).
 
 ---
 
