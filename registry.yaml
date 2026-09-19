@@ -104,13 +104,6 @@ plugins:
     size: "180MB"
     tags: [scanning, community]
 
-  fuzzing-templates:
-    repo: https://github.com/projectdiscovery/fuzzing-templates
-    type: nuclei-templates
-    description: "Nuclei fuzzing templates"
-    size: "5MB"
-    tags: [fuzzing, nuclei]
-
   # ── Configs ──────────────────────────────────────────────────
   gf-patterns:
     repo: https://github.com/1ndianl33t/Gf-Patterns
